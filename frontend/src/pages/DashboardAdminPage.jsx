@@ -508,6 +508,62 @@ export default function DashboardAdminPage() {
                 </div>
               )}
 
+              {/* Heures planifiées vs réalisées */}
+<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "1.25rem" }}>
+  {[
+    { classe: "L1-RST",  planifiees: 14, realisees: 10, color: "#0F6E56" },
+    { classe: "L2-RST",  planifiees: 12, realisees: 9,  color: "#534AB7" },
+    { classe: "L3-INFO", planifiees: 10, realisees: 6,  color: "#BA7517" },
+  ].map((c, i) => (
+    <div key={i} style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+        <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>{c.classe}</p>
+        <span style={{ fontSize: "11px", color: txt2 }}>{c.realisees}/{c.planifiees}h</span>
+      </div>
+      <p style={{ fontSize: "11px", color: txt2, margin: "0 0 4px" }}>Planifiées</p>
+      <div style={{ height: "6px", background: brd, borderRadius: "3px", marginBottom: "8px", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: "100%", background: `${c.color}40`, borderRadius: "3px" }}/>
+      </div>
+      <p style={{ fontSize: "11px", color: txt2, margin: "0 0 4px" }}>Réalisées</p>
+      <div style={{ height: "6px", background: brd, borderRadius: "3px", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${(c.realisees / c.planifiees) * 100}%`, background: c.color, borderRadius: "3px" }}/>
+      </div>
+      <p style={{ fontSize: "11px", color: c.color, margin: "6px 0 0", fontWeight: "500", textAlign: "right" }}>
+        {Math.round((c.realisees / c.planifiees) * 100)}% réalisé
+      </p>
+    </div>
+  ))}
+</div>
+
+{/* Avancement programmes */}
+<div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "1rem", marginBottom: "1.25rem" }}>
+  <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: "0 0 16px" }}>
+    📈 Avancement des programmes par matière
+  </p>
+  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+    {[
+      { matiere: "Réseaux Informatiques",        avancement: 65, couleur: "#0F6E56", classe: "L1-RST" },
+      { matiere: "Programmation Orientée Objet", avancement: 45, couleur: "#534AB7", classe: "L1-RST" },
+      { matiere: "Développement Web",            avancement: 30, couleur: "#BA7517", classe: "L2-RST" },
+      { matiere: "Bases de Données Avancées",    avancement: 55, couleur: "#185FA5", classe: "L2-RST" },
+      { matiere: "Systèmes d exploitation",      avancement: 40, couleur: "#993C1D", classe: "L1-RST" },
+    ].map((m, i) => (
+      <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ minWidth: "200px" }}>
+          <p style={{ fontSize: "12px", fontWeight: "500", color: txt, margin: "0 0 2px" }}>{m.matiere}</p>
+          <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>{m.classe}</p>
+        </div>
+        <div style={{ flex: 1, height: "8px", background: brd, borderRadius: "4px", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${m.avancement}%`, background: m.couleur, borderRadius: "4px" }}/>
+        </div>
+        <span style={{ minWidth: "40px", fontSize: "12px", fontWeight: "500", color: m.couleur, textAlign: "right" }}>
+          {m.avancement}%
+        </span>
+      </div>
+    ))}
+  </div>
+</div>
+
               {/* Actions rapides */}
               <p style={{ fontSize: "12px", fontWeight: "500", color: txt, margin: "16px 0 8px" }}>
                 Actions rapides
