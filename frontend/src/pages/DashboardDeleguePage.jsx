@@ -261,7 +261,38 @@ export default function DashboardDeleguePage() {
               })}
             </div>
           </div>
-
+           
+           {/* Emploi du temps semaine en cours */}
+<div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "1rem", marginBottom: "12px" }}>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+    <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>📅 Emploi du temps — Semaine en cours</p>
+    <button onClick={() => navigate("/emploi-temps")} style={{ padding: "5px 12px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", cursor: "pointer" }}>
+      Voir complet →
+    </button>
+  </div>
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "6px" }}>
+    {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"].map((jour, i) => (
+      <div key={jour} style={{ textAlign: "center" }}>
+        <div style={{ background: i === new Date().getDay() - 1 ? "#0F6E56" : bg3, color: i === new Date().getDay() - 1 ? "#fff" : txt2, borderRadius: "6px", padding: "4px", fontSize: "11px", fontWeight: "500", marginBottom: "4px" }}>
+          {jour}
+        </div>
+        {[
+          [{ m: "Réseaux", c: "#E1F5EE", b: "#0F6E56" }, { m: "POO", c: "#EEEDFE", b: "#534AB7" }],
+          [{ m: "Dev Web", c: "#FAEEDA", b: "#BA7517" }],
+          [{ m: "BDD", c: "#E6F1FB", b: "#185FA5" }],
+          [{ m: "Systèmes", c: "#FAECE7", b: "#993C1D" }],
+          [],
+          [],
+        ][i].map((s, j) => (
+          <div key={j} style={{ background: s.c, borderLeft: `2px solid ${s.b}`, borderRadius: "4px", padding: "3px 4px", marginBottom: "3px" }}>
+            <p style={{ fontSize: "9px", fontWeight: "500", color: s.b, margin: 0 }}>{s.m}</p>
+          </div>
+        ))}
+      </div>
+    ))}
+  </div>
+</div>
+          
           {/* Historique cahiers */}
           <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>

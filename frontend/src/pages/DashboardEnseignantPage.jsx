@@ -63,21 +63,22 @@ export default function DashboardEnseignantPage() {
     { id: "vacations", label: "Mes vacations",     icon: "💰", route: "/vacations" },
   ];
 
-  const statutBadge = (statut) => {
-    const cfg = {
-      pointee:    { bg: "#E1F5EE", color: "#085041", label: "Pointée" },
-      non_pointee:{ bg: "#FCEBEB", color: "#791F1F", label: "Non pointée" },
-      a_venir:    { bg: "#F1EFE8", color: "#5F5E5A", label: "À venir" },
-    };
-    const c = cfg[statut] || cfg.a_venir;
-    return (
-      <span style={{
-        background: c.bg, color: c.color,
-        fontSize: "11px", padding: "3px 10px",
-        borderRadius: "20px", fontWeight: "500"
-      }}>{c.label}</span>
-    );
+ const statutBadge = (statut) => {
+  const cfg = {
+    pointee:     { bg: "#E1F5EE", color: "#085041", label: "Pointée" },
+    non_pointee: { bg: "#FCEBEB", color: "#791F1F", label: "Non pointée" },
+    cloturee:    { bg: "#EEEDFE", color: "#3C3489", label: "Clôturée" },
+    a_venir:     { bg: "#F1EFE8", color: "#5F5E5A", label: "À venir" },
   };
+  const c = cfg[statut] || cfg.a_venir;
+  return (
+    <span style={{
+      background: c.bg, color: c.color,
+      fontSize: "11px", padding: "3px 10px",
+      borderRadius: "20px", fontWeight: "500"
+    }}>{c.label}</span>
+  );
+};
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: bg, transition: "all 0.3s" }}>
@@ -293,6 +294,39 @@ export default function DashboardEnseignantPage() {
               </div>
             )}
           </div>
+
+          {/* Historique par mois */}
+<div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "1rem", marginTop: "12px" }}>
+  <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: "0 0 16px" }}>
+    📅 Historique de mes séances par mois
+  </p>
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+    {[
+      { mois: "Avril 2026",   seances: 8,  heures: "16h", statut: "En cours", color: "#BA7517", bg: "#FAEEDA" },
+      { mois: "Mars 2026",    seances: 12, heures: "24h", statut: "Clôturé",  color: "#0F6E56", bg: "#E1F5EE" },
+      { mois: "Février 2026", seances: 10, heures: "20h", statut: "Payé",     color: "#534AB7", bg: "#EEEDFE" },
+    ].map((h, i) => (
+      <div key={i} style={{ background: h.bg, borderRadius: "10px", padding: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+          <p style={{ fontSize: "13px", fontWeight: "500", color: h.color, margin: 0 }}>{h.mois}</p>
+          <span style={{ fontSize: "10px", background: "rgba(255,255,255,0.5)", color: h.color, padding: "2px 7px", borderRadius: "20px", fontWeight: "500" }}>
+            {h.statut}
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: "16px" }}>
+          <div>
+            <p style={{ fontSize: "11px", color: h.color, margin: "0 0 2px", opacity: 0.8 }}>Séances</p>
+            <p style={{ fontSize: "18px", fontWeight: "500", color: h.color, margin: 0 }}>{h.seances}</p>
+          </div>
+          <div>
+            <p style={{ fontSize: "11px", color: h.color, margin: "0 0 2px", opacity: 0.8 }}>Heures</p>
+            <p style={{ fontSize: "18px", fontWeight: "500", color: h.color, margin: 0 }}>{h.heures}</p>
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
         </div>
       </div>
     </div>
