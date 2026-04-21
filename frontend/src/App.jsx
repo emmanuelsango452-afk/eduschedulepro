@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 // Pages
+import DashboardSurveillantPage from "./pages/DashboardSurveillantPage";
 import LoginPage from "./pages/LoginPage";
 import DashboardAdminPage from "./pages/DashboardAdminPage";
 import DashboardEnseignantPage from "./pages/DashboardEnseignantPage";
@@ -36,7 +37,7 @@ function RedirectParRole() {
     case "administrateur": return <Navigate to="/dashboard/admin" />;
     case "enseignant":     return <Navigate to="/dashboard/enseignant" />;
     case "delegue":        return <Navigate to="/dashboard/delegue" />;
-    case "surveillant":    return <Navigate to="/dashboard/admin" />;
+    case "surveillant": return <Navigate to="/dashboard/surveillant" />;
     case "comptable":      return <Navigate to="/dashboard/admin" />;
     default:               return <Navigate to="/login" />;
   }
@@ -58,6 +59,13 @@ function App() {
             <PrivateRoute roles={["administrateur", "surveillant", "comptable"]}>
               <DashboardAdminPage />
             </PrivateRoute>
+          }/>
+
+          {/* Dashboard Surveillant */}
+          <Route path="/dashboard/surveillant" element={
+            <PrivateRoute roles={["surveillant"]}>
+              <DashboardSurveillantPage />
+          </PrivateRoute>
           }/>
 
           {/* Dashboard Enseignant */}
