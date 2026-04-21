@@ -35,13 +35,13 @@ export default function LoginPage() {
     }
   };
 
-  const roles = [
-    { label: "Administrateur", color: "#0F6E56", bg: "#E1F5EE", icon: "⊞" },
-    { label: "Enseignant",     color: "#534AB7", bg: "#EEEDFE", icon: "👨‍🏫" },
-    { label: "Délégué",        color: "#BA7517", bg: "#FAEEDA", icon: "📝" },
-    { label: "Surveillant",    color: "#185FA5", bg: "#E6F1FB", icon: "👁️" },
-    { label: "Comptable",      color: "#993C1D", bg: "#FAECE7", icon: "💰" },
-  ];
+ const roles = [
+  { label: "Administrateur", color: "#0F6E56", bg: "#E1F5EE", icon: "⊞",  email: "admin@isge.bf" },
+  { label: "Enseignant",     color: "#534AB7", bg: "#EEEDFE", icon: "👨‍🏫", email: "cbere@isge.bf" },
+  { label: "Délégué",        color: "#BA7517", bg: "#FAEEDA", icon: "📝",  email: "delegue.l1@isge.bf" },
+  { label: "Surveillant",    color: "#185FA5", bg: "#E6F1FB", icon: "👁️",  email: "surveillant@isge.bf" },
+  { label: "Comptable",      color: "#993C1D", bg: "#FAECE7", icon: "💰",  email: "comptable@isge.bf" },
+];
 
   return (
     <div style={{
@@ -277,15 +277,19 @@ export default function LoginPage() {
           {/* Badges rôles */}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
             {roles.map(role => (
-              <div key={role.label} style={{
-                display: "flex", alignItems: "center", gap: "5px",
-                background: role.bg, color: role.color,
-                padding: "5px 10px", borderRadius: "20px",
-                fontSize: "11px", fontWeight: "500"
-              }}>
-                <span style={{ fontSize: "12px" }}>{role.icon}</span>
-                {role.label}
-              </div>
+                <div key={role.label} onClick={() => {
+                    setEmail(role.email);
+                    setPassword("password");
+            }} style={{
+                   display: "flex", alignItems: "center", gap: "5px",
+                   background: role.bg, color: role.color,
+                   padding: "5px 10px", borderRadius: "20px",
+                   fontSize: "11px", fontWeight: "500",
+                   cursor: "pointer", transition: "opacity 0.2s"
+            }}>
+              <span style={{ fontSize: "12px" }}>{role.icon}</span>
+              {role.label}
+          </div>
             ))}
           </div>
 

@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 // Pages
+import EnseignantsPage from "./pages/EnseignantsPage";
+import RapportsPage from "./pages/RapportsPage";
 import DashboardComptablePage from "./pages/DashboardComptablePage";
 import DashboardSurveillantPage from "./pages/DashboardSurveillantPage";
 import LoginPage from "./pages/LoginPage";
@@ -109,6 +111,20 @@ function App() {
             <PrivateRoute roles={["administrateur", "enseignant", "surveillant", "comptable"]}>
               <VacationPage />
             </PrivateRoute>
+          }/>
+
+          {/* Enseignants */}
+          <Route path="/enseignants" element={
+           <PrivateRoute roles={["administrateur"]}>
+            <EnseignantsPage />
+          </PrivateRoute>
+          }/>
+
+          {/* Rapports */}
+          <Route path="/rapports" element={
+            <PrivateRoute roles={["administrateur", "surveillant"]}>
+              <RapportsPage />
+          </PrivateRoute>
           }/>
 
           {/* Route inconnue */}

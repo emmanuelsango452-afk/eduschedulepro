@@ -7,7 +7,7 @@ import SignaturePad from "signature_pad";
 const API = "http://localhost/eduschedulepro/backend/api";
 
 export default function CahierTextePage() {
-  const { token } = useAuth();
+  const { token, utilisateur } = useAuth();
   const navigate  = useNavigate();
   const [cahiers, setCahiers]         = useState([]);
   const [selected, setSelected]       = useState(null);
@@ -17,6 +17,20 @@ export default function CahierTextePage() {
   const [onglet, setOnglet]           = useState("detail");
   const [filtre, setFiltre]           = useState("tous");
   const [search, setSearch]           = useState("");
+  const [formContenu, setFormContenu] = useState({
+    titre_cours: "",
+    points_vus: "",
+    niveau_avancement: "",
+    observations: "",
+    heure_fin: "",
+  });
+  const [travaux, setTravaux]         = useState([]);
+  const [nouveauTravail, setNouveauTravail] = useState({
+    description: "", date_limite: "", type: "exercice"
+  });
+  const [saving, setSaving]           = useState(false);
+  const [message, setMessage]         = useState("");
+
   const sigDelRef = useRef(null);
   const sigEnsRef = useRef(null);
   const sigDelPad = useRef(null);
@@ -40,19 +54,36 @@ export default function CahierTextePage() {
 
   useEffect(() => {
     if (onglet === "signer" && sigDelRef.current && sigEnsRef.current) {
-      sigDelPad.current = new SignaturePad(sigDelRef.current, { penColor: "#0F6E56" });
-      sigEnsPad.current = new SignaturePad(sigEnsRef.current, { penColor: "#0F6E56" });
+      setTimeout(() => {
+        sigDelPad.current = new SignaturePad(sigDelRef.current, { penColor: "#0F6E56" });
+        sigEnsPad.current = new SignaturePad(sigEnsRef.current, { penColor: "#0F6E56" });
+      }, 100);
     }
   }, [onglet, selected]);
 
+  useEffect(() => {
+    if (selected) {
+      setFormContenu({
+        titre_cours:        selected.titre_cours || "",
+        points_vus:         selected.contenu_json?.points?.join("\n") || "",
+        niveau_avancement:  selected.niveau_avancement || "",
+        observations:       selected.contenu_json?.observations || "",
+        heure_fin:          selected.heure_fin_reelle || "",
+      });
+      setTravaux(selected.travaux || []);
+    }
+  }, [selected]);
+
   const getStatut = (statut) => {
     const cfg = {
-      brouillon:     { bg: "#F1EFE8", color: "#5F5E5A", label: "Brouillon",       icon: "📄" },
-      signe_delegue: { bg: "#FAEEDA", color: "#633806", label: "Signé délégué",   icon: "✍️" },
-      cloture:       { bg: "#E1F5EE", color: "#085041", label: "Clôturé",          icon: "✅" },
+      brouillon:     { bg: "#F1EFE8", color: "#5F5E5A", label: "Brouillon",     icon: "📄", step: 1 },
+      signe_delegue: { bg: "#FAEEDA", color: "#633806", label: "Signé délégué", icon: "✍️", step: 2 },
+      cloture:       { bg: "#E1F5EE", color: "#085041", label: "Clôturé",        icon: "✅", step: 3 },
     };
     return cfg[statut] || cfg.brouillon;
   };
+
+  const estVerrouille = selected?.statut === "cloture";
 
   const cahiersFiltres = cahiers.filter(c => {
     const matchFiltre = filtre === "tous" || c.statut === filtre;
@@ -64,10 +95,79 @@ export default function CahierTextePage() {
   });
 
   const stats = {
-    total:    cahiers.length,
+    total:     cahiers.length,
     brouillon: cahiers.filter(c => c.statut === "brouillon").length,
-    signe:    cahiers.filter(c => c.statut === "signe_delegue").length,
-    cloture:  cahiers.filter(c => c.statut === "cloture").length,
+    signe:     cahiers.filter(c => c.statut === "signe_delegue").length,
+    cloture:   cahiers.filter(c => c.statut === "cloture").length,
+  };
+
+  const handleSauvegarder = async () => {
+    if (!selected || estVerrouille) return;
+    setSaving(true);
+    try {
+      await axios.put(`${API}/cahiers.php?id=${selected.id}`, {
+        titre_cours:       formContenu.titre_cours,
+        contenu_json: {
+          points:       formContenu.points_vus.split("\n").filter(p => p.trim()),
+          observations: formContenu.observations
+        },
+        niveau_avancement: formContenu.niveau_avancement,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setMessage("✅ Cahier sauvegardé !");
+      setTimeout(() => setMessage(""), 3000);
+    } catch (err) {
+      setMessage("❌ Erreur lors de la sauvegarde");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCloture = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      const sigBase64 = sigEnsPad.current?.isEmpty() ? null : sigEnsPad.current?.toDataURL();
+      await axios.post(`${API}/cahiers.php?id=${selected.id}&action=cloture`, {
+        heure_fin:        formContenu.heure_fin || new Date().toTimeString().slice(0,8),
+        signature_base64: sigBase64
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setMessage("✅ Séance clôturée !");
+      const res = await axios.get(`${API}/cahiers.php`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.data.succes) setCahiers(res.data.data);
+      setTimeout(() => setMessage(""), 3000);
+    } catch (err) {
+      setMessage("❌ Erreur lors de la clôture");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSigner = async (type) => {
+    const pad = type === "delegue" ? sigDelPad.current : sigEnsPad.current;
+    if (!pad || pad.isEmpty()) {
+      setMessage("⚠️ Veuillez d'abord signer !");
+      setTimeout(() => setMessage(""), 3000);
+      return;
+    }
+    setSaving(true);
+    try {
+      await axios.post(`${API}/cahiers.php?id=${selected.id}&action=signer`, {
+        type:             type,
+        signature_base64: pad.toDataURL()
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setMessage(`✅ Signature ${type} enregistrée !`);
+      setTimeout(() => setMessage(""), 3000);
+    } catch (err) {
+      setMessage("❌ Erreur lors de la signature");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAjouterTravail = () => {
+    if (!nouveauTravail.description) return;
+    setTravaux([...travaux, { ...nouveauTravail, id: Date.now() }]);
+    setNouveauTravail({ description: "", date_limite: "", type: "exercice" });
   };
 
   const menuItems = [
@@ -83,11 +183,7 @@ export default function CahierTextePage() {
     <div style={{ display: "flex", minHeight: "100vh", background: bg, transition: "all 0.3s" }}>
 
       {/* Sidebar */}
-      <div style={{
-        width: sidebarOpen ? "220px" : "60px", background: "#04342C",
-        transition: "width 0.3s", display: "flex", flexDirection: "column",
-        flexShrink: 0, overflow: "hidden"
-      }}>
+      <div style={{ width: sidebarOpen ? "220px" : "60px", background: "#04342C", transition: "width 0.3s", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
         <div style={{ padding: "16px", borderBottom: "0.5px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{ width: "32px", height: "32px", background: "#1D9E75", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -108,48 +204,45 @@ export default function CahierTextePage() {
             </div>
           ))}
         </div>
-        <div onClick={() => setSidebarOpen(!sidebarOpen)} style={{
-          padding: "16px", cursor: "pointer", textAlign: "center",
-          borderTop: "0.5px solid rgba(255,255,255,0.1)", color: "#9FE1CB", fontSize: "18px"
-        }}>{sidebarOpen ? "◀" : "▶"}</div>
+        <div onClick={() => setSidebarOpen(!sidebarOpen)} style={{ padding: "16px", cursor: "pointer", textAlign: "center", borderTop: "0.5px solid rgba(255,255,255,0.1)", color: "#9FE1CB", fontSize: "18px" }}>
+          {sidebarOpen ? "◀" : "▶"}
+        </div>
       </div>
 
       {/* Contenu */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Topbar */}
-        <div style={{
-          background: bg2, padding: "10px 20px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          borderBottom: `0.5px solid ${brd}`
-        }}>
+        <div style={{ background: bg2, padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `0.5px solid ${brd}` }}>
           <div>
             <p style={{ margin: 0, fontSize: "15px", fontWeight: "500", color: txt }}>Cahiers de texte</p>
             <p style={{ margin: 0, fontSize: "12px", color: txt2 }}>{cahiers.length} cahier(s) enregistré(s)</p>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <button onClick={() => setDark(!dark)} style={{
-              width: "36px", height: "36px", background: bg3, borderRadius: "8px",
-              border: `0.5px solid ${brd}`, cursor: "pointer", fontSize: "16px"
-            }}>{dark ? "☀️" : "🌙"}</button>
+            {message && (
+              <div style={{ padding: "6px 12px", background: message.includes("✅") ? "#E1F5EE" : "#FCEBEB", color: message.includes("✅") ? "#085041" : "#791F1F", borderRadius: "8px", fontSize: "12px", fontWeight: "500" }}>
+                {message}
+              </div>
+            )}
+            <button onClick={() => setDark(!dark)} style={{ width: "36px", height: "36px", background: bg3, borderRadius: "8px", border: `0.5px solid ${brd}`, cursor: "pointer", fontSize: "16px" }}>
+              {dark ? "☀️" : "🌙"}
+            </button>
           </div>
         </div>
 
-        {/* Stats rapides */}
-        <div style={{
-          display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-          gap: "10px", padding: "1rem 1.25rem 0",
-        }}>
+        {/* Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", padding: "1rem 1.25rem 0" }}>
           {[
-            { label: "Total",          val: stats.total,     color: "#0F6E56", bg: "#E1F5EE", icon: "📚" },
-            { label: "Brouillons",     val: stats.brouillon, color: "#5F5E5A", bg: "#F1EFE8", icon: "📄" },
-            { label: "Signés délégué", val: stats.signe,     color: "#633806", bg: "#FAEEDA", icon: "✍️" },
-            { label: "Clôturés",       val: stats.cloture,   color: "#085041", bg: "#E1F5EE", icon: "✅" },
+            { label: "Total",          val: stats.total,     color: "#0F6E56", bg: "#E1F5EE", icon: "📚", id: "tous" },
+            { label: "Brouillons",     val: stats.brouillon, color: "#5F5E5A", bg: "#F1EFE8", icon: "📄", id: "brouillon" },
+            { label: "Signés délégué", val: stats.signe,     color: "#633806", bg: "#FAEEDA", icon: "✍️", id: "signe_delegue" },
+            { label: "Clôturés",       val: stats.cloture,   color: "#085041", bg: "#E1F5EE", icon: "✅", id: "cloture" },
           ].map((s, i) => (
-            <div key={i} onClick={() => setFiltre(["tous", "brouillon", "signe_delegue", "cloture"][i])} style={{
-              background: bg2, borderRadius: "10px", border: `0.5px solid ${filtre === ["tous","brouillon","signe_delegue","cloture"][i] ? s.color : brd}`,
-              padding: "12px", cursor: "pointer", display: "flex", alignItems: "center", gap: "12px",
-              transition: "border 0.2s"
+            <div key={i} onClick={() => setFiltre(s.id)} style={{
+              background: bg2, borderRadius: "10px",
+              border: `0.5px solid ${filtre === s.id ? s.color : brd}`,
+              padding: "12px", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: "12px"
             }}>
               <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>
                 {s.icon}
@@ -165,27 +258,17 @@ export default function CahierTextePage() {
         <div style={{ flex: 1, display: "flex", overflow: "hidden", padding: "1rem 1.25rem", gap: "12px" }}>
 
           {/* Liste */}
-          <div style={{
-            width: "320px", background: bg2, borderRadius: "12px",
-            border: `0.5px solid ${brd}`, display: "flex", flexDirection: "column", flexShrink: 0
-          }}>
-            {/* Recherche */}
+          <div style={{ width: "300px", background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, display: "flex", flexDirection: "column", flexShrink: 0 }}>
             <div style={{ padding: "12px", borderBottom: `0.5px solid ${brd}` }}>
-              <input
-                type="text" placeholder="🔍 Rechercher..."
-                value={search} onChange={e => setSearch(e.target.value)}
-                style={{
-                  width: "100%", boxSizing: "border-box", padding: "8px 12px",
-                  borderRadius: "8px", border: `0.5px solid ${brd}`,
-                  background: bg3, color: txt, fontSize: "12px"
-                }}
-              />
+              <input type="text" placeholder="🔍 Rechercher..." value={search} onChange={e => setSearch(e.target.value)} style={{
+                width: "100%", boxSizing: "border-box", padding: "8px 12px",
+                borderRadius: "8px", border: `0.5px solid ${brd}`,
+                background: bg3, color: txt, fontSize: "12px"
+              }}/>
             </div>
-
-            {/* Liste des cahiers */}
             <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
               {loading ? (
-                <p style={{ color: txt2, fontSize: "13px", textAlign: "center", padding: "2rem" }}>Chargement...</p>
+                <p style={{ color: txt2, textAlign: "center", padding: "2rem", fontSize: "13px" }}>Chargement...</p>
               ) : cahiersFiltres.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "2rem" }}>
                   <p style={{ fontSize: "32px" }}>📝</p>
@@ -199,20 +282,17 @@ export default function CahierTextePage() {
                       background: selected?.id === c.id ? bg3 : "transparent",
                       borderRadius: "10px",
                       border: `0.5px solid ${selected?.id === c.id ? "#0F6E56" : "transparent"}`,
-                      padding: "12px", marginBottom: "4px", cursor: "pointer",
                       borderLeft: `3px solid ${selected?.id === c.id ? "#0F6E56" : "transparent"}`,
-                      transition: "all 0.2s"
+                      padding: "12px", marginBottom: "4px", cursor: "pointer"
                     }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
-                        <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>
-                          {c.matiere || "Matière inconnue"}
-                        </p>
+                        <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>{c.matiere || "Matière"}</p>
                         <span style={{ fontSize: "10px", background: s.bg, color: s.color, padding: "2px 7px", borderRadius: "20px", fontWeight: "500" }}>
                           {s.icon} {s.label}
                         </span>
                       </div>
                       <p style={{ fontSize: "12px", color: txt2, margin: "0 0 3px" }}>{c.classe}</p>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
                         <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>{c.enseignant?.split(" ").slice(-1)[0]}</p>
                         <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>
                           {c.date_creation ? new Date(c.date_creation).toLocaleDateString("fr-FR") : ""}
@@ -235,8 +315,8 @@ export default function CahierTextePage() {
               </div>
             ) : (
               <>
-                {/* Header cahier */}
-                <div style={{ padding: "16px 20px", borderBottom: `0.5px solid ${brd}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                {/* Header */}
+                <div style={{ padding: "14px 20px", borderBottom: `0.5px solid ${brd}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <p style={{ fontSize: "15px", fontWeight: "500", color: txt, margin: "0 0 3px" }}>{selected.matiere}</p>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -244,29 +324,60 @@ export default function CahierTextePage() {
                       <span style={{ color: brd }}>•</span>
                       <span style={{ fontSize: "12px", color: txt2 }}>{selected.enseignant}</span>
                       <span style={{ color: brd }}>•</span>
-                      <span style={{
-                        fontSize: "11px",
-                        background: getStatut(selected.statut).bg,
-                        color: getStatut(selected.statut).color,
-                        padding: "2px 8px", borderRadius: "20px", fontWeight: "500"
-                      }}>
+                      <span style={{ fontSize: "11px", background: getStatut(selected.statut).bg, color: getStatut(selected.statut).color, padding: "2px 8px", borderRadius: "20px", fontWeight: "500" }}>
                         {getStatut(selected.statut).icon} {getStatut(selected.statut).label}
                       </span>
+                      {estVerrouille && (
+                        <span style={{ fontSize: "11px", background: "#FCEBEB", color: "#791F1F", padding: "2px 8px", borderRadius: "20px" }}>
+                          🔒 Verrouillé
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <button style={{
-                    padding: "6px 14px", background: "#E1F5EE", color: "#085041",
-                    border: "0.5px solid #9FE1CB", borderRadius: "8px",
-                    fontSize: "12px", cursor: "pointer"
-                  }}>📄 Exporter PDF</button>
+                  <button style={{ padding: "6px 14px", background: "#E1F5EE", color: "#085041", border: "0.5px solid #9FE1CB", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
+                    📄 Exporter PDF
+                  </button>
+                </div>
+
+                {/* Étapes du processus */}
+                <div style={{ padding: "12px 20px", borderBottom: `0.5px solid ${brd}`, background: bg3 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0" }}>
+                    {[
+                      { num: 1, label: "Pointage QR", done: true },
+                      { num: 2, label: "Saisie contenu", done: selected.titre_cours },
+                      { num: 3, label: "Signature délégué", done: selected.statut !== "brouillon" },
+                      { num: 4, label: "Clôture enseignant", done: selected.statut === "cloture" },
+                    ].map((step, i) => (
+                      <div key={i} style={{ flex: 1, display: "flex", alignItems: "center" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+                          <div style={{
+                            width: "28px", height: "28px", borderRadius: "50%",
+                            background: step.done ? "#0F6E56" : bg2,
+                            border: `2px solid ${step.done ? "#0F6E56" : brd}`,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: "11px", fontWeight: "500",
+                            color: step.done ? "#fff" : txt2
+                          }}>
+                            {step.done ? "✓" : step.num}
+                          </div>
+                          <p style={{ fontSize: "10px", color: step.done ? "#0F6E56" : txt2, margin: "4px 0 0", textAlign: "center", fontWeight: step.done ? "500" : "400" }}>
+                            {step.label}
+                          </p>
+                        </div>
+                        {i < 3 && (
+                          <div style={{ height: "2px", flex: 1, background: step.done ? "#0F6E56" : brd, margin: "0 4px", marginBottom: "16px" }}/>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Onglets */}
-                <div style={{ display: "flex", gap: "0", borderBottom: `0.5px solid ${brd}` }}>
+                <div style={{ display: "flex", borderBottom: `0.5px solid ${brd}` }}>
                   {[
                     { id: "detail",  label: "📄 Contenu" },
-                    { id: "signer",  label: "✍️ Signatures" },
                     { id: "travaux", label: "📚 Travaux" },
+                    { id: "signer",  label: "✍️ Signatures" },
                   ].map(o => (
                     <button key={o.id} onClick={() => setOnglet(o.id)} style={{
                       padding: "10px 20px", border: "none", cursor: "pointer",
@@ -278,167 +389,319 @@ export default function CahierTextePage() {
                   ))}
                 </div>
 
-                {/* Contenu onglet */}
+                {/* Contenu onglets */}
                 <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
 
                   {onglet === "detail" && (
                     <div>
-                      {/* Infos séance */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "16px" }}>
-                        {[
-                          { label: "Date",       val: selected.date_creation ? new Date(selected.date_creation).toLocaleDateString("fr-FR") : "—", icon: "📅" },
-                          { label: "Heure fin",  val: selected.heure_fin_reelle || "En cours", icon: "⏰" },
-                          { label: "Avancement", val: selected.niveau_avancement || "—", icon: "📊" },
-                        ].map(item => (
-                          <div key={item.label} style={{ background: bg3, borderRadius: "10px", padding: "12px", display: "flex", gap: "10px", alignItems: "center" }}>
-                            <span style={{ fontSize: "20px" }}>{item.icon}</span>
-                            <div>
-                              <p style={{ fontSize: "11px", color: txt2, margin: "0 0 3px" }}>{item.label}</p>
-                              <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>{item.val}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Titre cours */}
-                      <div style={{ background: bg3, borderRadius: "10px", padding: "16px", marginBottom: "12px", borderLeft: "3px solid #0F6E56" }}>
-                        <p style={{ fontSize: "12px", color: txt2, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Titre du cours</p>
-                        <p style={{ fontSize: "15px", fontWeight: "500", color: txt, margin: 0 }}>
-                          {selected.titre_cours || "Non renseigné"}
+                      {/* Infos automatiques */}
+                      <div style={{ background: bg3, borderRadius: "10px", padding: "12px 16px", marginBottom: "16px" }}>
+                        <p style={{ fontSize: "12px", color: txt2, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: "500" }}>
+                          Informations automatiques
                         </p>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+                          {[
+                            { label: "Classe",       val: selected.classe },
+                            { label: "Matière",      val: selected.matiere },
+                            { label: "Enseignant",   val: selected.enseignant },
+                            { label: "Date",         val: selected.date_creation ? new Date(selected.date_creation).toLocaleDateString("fr-FR") : "—" },
+                            { label: "Heure début (QR)", val: "08h07 ✓" },
+                            { label: "Heure fin",    val: selected.heure_fin_reelle || "En cours..." },
+                          ].map(item => (
+                            <div key={item.label} style={{ background: bg2, borderRadius: "8px", padding: "8px 10px" }}>
+                              <p style={{ fontSize: "10px", color: txt2, margin: "0 0 3px" }}>{item.label}</p>
+                              <p style={{ fontSize: "12px", fontWeight: "500", color: txt, margin: 0 }}>{item.val || "—"}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
-                      {/* Points vus */}
-                      <div style={{ background: bg2, borderRadius: "10px", border: `0.5px solid ${brd}`, padding: "16px", marginBottom: "12px" }}>
-                        <p style={{ fontSize: "12px", color: txt2, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Points vus dans le cours</p>
-                        {selected.contenu_json?.points ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                            {selected.contenu_json.points.map((point, i) => (
-                              <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#0F6E56", flexShrink: 0 }}/>
-                                <p style={{ fontSize: "13px", color: txt, margin: 0 }}>{point}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p style={{ fontSize: "13px", color: txt2, margin: 0 }}>Non renseigné</p>
-                        )}
+                      {/* Champs à remplir par le délégué */}
+                      <div style={{ marginBottom: "12px" }}>
+                        <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
+                          📌 Titre du cours <span style={{ color: "#E24B4A" }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formContenu.titre_cours}
+                          onChange={e => setFormContenu({...formContenu, titre_cours: e.target.value})}
+                          placeholder="Ex: Introduction aux protocoles TCP/IP"
+                          disabled={estVerrouille}
+                          style={{
+                            width: "100%", boxSizing: "border-box", padding: "10px 12px",
+                            borderRadius: "8px", border: `0.5px solid ${brd}`,
+                            background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px"
+                          }}
+                        />
                       </div>
 
-                      {/* Barre progression */}
-                      <div style={{ background: bg2, borderRadius: "10px", border: `0.5px solid ${brd}`, padding: "16px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-                          <p style={{ fontSize: "12px", color: txt2, margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Avancement programme</p>
-                          <p style={{ fontSize: "13px", color: "#0F6E56", margin: 0, fontWeight: "500" }}>
-                            {selected.niveau_avancement || "Non renseigné"}
+                      <div style={{ marginBottom: "12px" }}>
+                        <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
+                          📋 Points vus dans le cours <span style={{ color: "#E24B4A" }}>*</span>
+                        </label>
+                        <textarea
+                          value={formContenu.points_vus}
+                          onChange={e => setFormContenu({...formContenu, points_vus: e.target.value})}
+                          placeholder="Un point par ligne&#10;Ex: Modèle OSI&#10;Protocole IP&#10;Adressage IPv4"
+                          disabled={estVerrouille}
+                          rows={4}
+                          style={{
+                            width: "100%", boxSizing: "border-box", padding: "10px 12px",
+                            borderRadius: "8px", border: `0.5px solid ${brd}`,
+                            background: estVerrouille ? bg3 : bg2, color: txt,
+                            fontSize: "13px", resize: "vertical", fontFamily: "inherit"
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                        <div>
+                          <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
+                            📊 Niveau d'avancement
+                          </label>
+                          <input
+                            type="text"
+                            value={formContenu.niveau_avancement}
+                            onChange={e => setFormContenu({...formContenu, niveau_avancement: e.target.value})}
+                            placeholder="Ex: Chapitre 2 / 5 — 40%"
+                            disabled={estVerrouille}
+                            style={{
+                              width: "100%", boxSizing: "border-box", padding: "10px 12px",
+                              borderRadius: "8px", border: `0.5px solid ${brd}`,
+                              background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px"
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
+                            ⏰ Heure de fin réelle
+                          </label>
+                          <input
+                            type="time"
+                            value={formContenu.heure_fin}
+                            onChange={e => setFormContenu({...formContenu, heure_fin: e.target.value})}
+                            disabled={estVerrouille}
+                            style={{
+                              width: "100%", boxSizing: "border-box", padding: "10px 12px",
+                              borderRadius: "8px", border: `0.5px solid ${brd}`,
+                              background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px"
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ marginBottom: "16px" }}>
+                        <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
+                          💬 Observations (incidents, retards, absences)
+                        </label>
+                        <textarea
+                          value={formContenu.observations}
+                          onChange={e => setFormContenu({...formContenu, observations: e.target.value})}
+                          placeholder="Signaler tout incident, retard ou absence particulière..."
+                          disabled={estVerrouille}
+                          rows={3}
+                          style={{
+                            width: "100%", boxSizing: "border-box", padding: "10px 12px",
+                            borderRadius: "8px", border: `0.5px solid ${brd}`,
+                            background: estVerrouille ? bg3 : bg2, color: txt,
+                            fontSize: "13px", resize: "vertical", fontFamily: "inherit"
+                          }}
+                        />
+                      </div>
+
+                      {/* Boutons */}
+                      {!estVerrouille && (
+                        <div style={{ display: "flex", gap: "10px" }}>
+                          <button onClick={handleSauvegarder} disabled={saving} style={{
+                            flex: 1, padding: "11px", background: "#0F6E56", color: "#fff",
+                            border: "none", borderRadius: "8px", fontSize: "13px",
+                            fontWeight: "500", cursor: "pointer"
+                          }}>
+                            {saving ? "⏳ Sauvegarde..." : "💾 Enregistrer brouillon"}
+                          </button>
+                          <button onClick={() => setOnglet("signer")} style={{
+                            padding: "11px 20px", background: "#EEEDFE", color: "#3C3489",
+                            border: "0.5px solid #CECBF6", borderRadius: "8px",
+                            fontSize: "13px", cursor: "pointer", fontWeight: "500"
+                          }}>
+                            ✍️ Signer →
+                          </button>
+                        </div>
+                      )}
+
+                      {estVerrouille && (
+                        <div style={{ background: "#FCEBEB", borderRadius: "10px", padding: "12px 16px", display: "flex", gap: "10px", alignItems: "center" }}>
+                          <span style={{ fontSize: "20px" }}>🔒</span>
+                          <p style={{ fontSize: "13px", color: "#791F1F", margin: 0 }}>
+                            Cette fiche est verrouillée. Aucune modification n'est possible sans déverrouillage administrateur.
                           </p>
                         </div>
-                        <div style={{ height: "8px", background: bg3, borderRadius: "4px", overflow: "hidden" }}>
-                          <div style={{
-                            height: "100%",
-                            width: selected.niveau_avancement?.includes("40%") ? "40%" :
-                                   selected.niveau_avancement?.includes("25%") ? "25%" :
-                                   selected.niveau_avancement?.includes("50%") ? "50%" : "30%",
-                            background: "linear-gradient(90deg, #0F6E56, #1D9E75)",
-                            borderRadius: "4px", transition: "width 1s ease"
-                          }}/>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {onglet === "signer" && (
-                    <div>
-                      <div style={{ background: bg3, borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", gap: "10px", alignItems: "center" }}>
-                        <span style={{ fontSize: "20px" }}>ℹ️</span>
-                        <p style={{ fontSize: "13px", color: txt2, margin: 0 }}>
-                          Dessinez votre signature dans le cadre ci-dessous puis cliquez sur Valider.
-                        </p>
-                      </div>
-
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                        {/* Sig délégué */}
-                        <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "16px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#E1F5EE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✍️</div>
-                            <div>
-                              <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>Délégué</p>
-                              <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>Signature requise</p>
-                            </div>
-                          </div>
-                          <canvas ref={sigDelRef} width={300} height={130} style={{
-                            border: `1.5px dashed ${brd}`, borderRadius: "8px",
-                            background: bg3, width: "100%", touchAction: "none", cursor: "crosshair"
-                          }}/>
-                          <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
-                            <button onClick={() => sigDelPad.current?.clear()} style={{
-                              flex: 1, padding: "8px", background: bg3, color: txt2,
-                              border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer"
-                            }}>🗑️ Effacer</button>
-                            <button style={{
-                              flex: 1, padding: "8px", background: "#0F6E56", color: "#fff",
-                              border: "none", borderRadius: "8px", fontSize: "12px",
-                              cursor: "pointer", fontWeight: "500"
-                            }}>✅ Valider</button>
-                          </div>
-                        </div>
-
-                        {/* Sig enseignant */}
-                        <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "16px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✍️</div>
-                            <div>
-                              <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>Enseignant</p>
-                              <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>Signature requise</p>
-                            </div>
-                          </div>
-                          <canvas ref={sigEnsRef} width={300} height={130} style={{
-                            border: `1.5px dashed ${brd}`, borderRadius: "8px",
-                            background: bg3, width: "100%", touchAction: "none", cursor: "crosshair"
-                          }}/>
-                          <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
-                            <button onClick={() => sigEnsPad.current?.clear()} style={{
-                              flex: 1, padding: "8px", background: bg3, color: txt2,
-                              border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer"
-                            }}>🗑️ Effacer</button>
-                            <button style={{
-                              flex: 1, padding: "8px", background: "#534AB7", color: "#fff",
-                              border: "none", borderRadius: "8px", fontSize: "12px",
-                              cursor: "pointer", fontWeight: "500"
-                            }}>✅ Valider</button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div style={{ display: "flex", gap: "10px" }}>
-                        <button style={{
-                          flex: 1, padding: "12px", background: "#0F6E56", color: "#fff",
-                          border: "none", borderRadius: "10px", fontSize: "14px",
-                          fontWeight: "500", cursor: "pointer"
-                        }}>✅ Clôturer la séance</button>
-                        <button style={{
-                          padding: "12px 20px", background: "#FCEBEB", color: "#791F1F",
-                          border: "0.5px solid #F09595", borderRadius: "10px",
-                          fontSize: "14px", cursor: "pointer"
-                        }}>⚠️ Signaler incident</button>
-                      </div>
+                      )}
                     </div>
                   )}
 
                   {onglet === "travaux" && (
                     <div>
-                      <div style={{ background: bg3, borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>Travaux demandés</p>
-                        <button style={{
-                          padding: "6px 14px", background: "#0F6E56", color: "#fff",
-                          border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer"
-                        }}>+ Ajouter</button>
+                      <p style={{ fontSize: "13px", color: txt2, margin: "0 0 16px" }}>
+                        Devoirs, exercices et lectures à rendre par les étudiants.
+                      </p>
+
+                      {/* Ajouter travail */}
+                      {!estVerrouille && (
+                        <div style={{ background: bg3, borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
+                          <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: "0 0 12px" }}>➕ Ajouter un travail</p>
+                          <div style={{ marginBottom: "10px" }}>
+                            <input
+                              type="text"
+                              placeholder="Description du travail..."
+                              value={nouveauTravail.description}
+                              onChange={e => setNouveauTravail({...nouveauTravail, description: e.target.value})}
+                              style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}
+                            />
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+                            <div>
+                              <label style={{ fontSize: "11px", color: txt2, display: "block", marginBottom: "4px" }}>Type</label>
+                              <select value={nouveauTravail.type} onChange={e => setNouveauTravail({...nouveauTravail, type: e.target.value})} style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}>
+                                <option value="exercice">Exercice</option>
+                                <option value="devoir">Devoir</option>
+                                <option value="projet">Projet</option>
+                                <option value="lecture">Lecture</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontSize: "11px", color: txt2, display: "block", marginBottom: "4px" }}>Date limite</label>
+                              <input type="date" value={nouveauTravail.date_limite} onChange={e => setNouveauTravail({...nouveauTravail, date_limite: e.target.value})} style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}/>
+                            </div>
+                          </div>
+                          <button onClick={handleAjouterTravail} style={{ padding: "9px 20px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", cursor: "pointer", fontWeight: "500" }}>
+                            ➕ Ajouter
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Liste travaux */}
+                      {travaux.length === 0 ? (
+                        <div style={{ textAlign: "center", padding: "2rem" }}>
+                          <p style={{ fontSize: "32px" }}>📚</p>
+                          <p style={{ color: txt2, fontSize: "13px" }}>Aucun travail demandé</p>
+                        </div>
+                      ) : (
+                        travaux.map((t, i) => {
+                          const typeCfg = {
+                            exercice: { bg: "#EEEDFE", color: "#3C3489" },
+                            devoir:   { bg: "#FAEEDA", color: "#633806" },
+                            projet:   { bg: "#E6F1FB", color: "#0C447C" },
+                            lecture:  { bg: "#E1F5EE", color: "#085041" },
+                          };
+                          const tc = typeCfg[t.type] || typeCfg.exercice;
+                          return (
+                            <div key={i} style={{ background: bg2, borderRadius: "10px", border: `0.5px solid ${brd}`, padding: "12px 16px", marginBottom: "8px", display: "flex", alignItems: "center", gap: "12px" }}>
+                              <span style={{ fontSize: "11px", background: tc.bg, color: tc.color, padding: "3px 8px", borderRadius: "20px", fontWeight: "500", flexShrink: 0 }}>
+                                {t.type}
+                              </span>
+                              <p style={{ fontSize: "13px", color: txt, margin: 0, flex: 1 }}>{t.description}</p>
+                              {t.date_limite && (
+                                <span style={{ fontSize: "11px", color: txt2, flexShrink: 0 }}>📅 {t.date_limite}</span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+
+                  {onglet === "signer" && (
+                    <div>
+                      {estVerrouille ? (
+                        <div style={{ background: "#E1F5EE", borderRadius: "10px", padding: "16px", marginBottom: "16px", display: "flex", gap: "10px", alignItems: "center" }}>
+                          <span style={{ fontSize: "20px" }}>✅</span>
+                          <p style={{ fontSize: "13px", color: "#085041", margin: 0, fontWeight: "500" }}>
+                            Cette fiche est clôturée et signée par les deux parties.
+                          </p>
+                        </div>
+                      ) : (
+                        <div style={{ background: bg3, borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", gap: "10px" }}>
+                          <span style={{ fontSize: "20px" }}>ℹ️</span>
+                          <p style={{ fontSize: "13px", color: txt2, margin: 0 }}>
+                            Dessinez votre signature dans le cadre puis cliquez sur Valider. La signature sera horodatée et associée à votre compte.
+                          </p>
+                        </div>
+                      )}
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+                        {/* Signature délégué */}
+                        <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#E1F5EE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✍️</div>
+                            <div>
+                              <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>Délégué de classe</p>
+                              <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>
+                                {selected.statut !== "brouillon" ? "✅ Signé" : "En attente"}
+                              </p>
+                            </div>
+                          </div>
+                          <canvas ref={sigDelRef} width={300} height={120} style={{
+                            border: `1.5px dashed ${brd}`, borderRadius: "8px",
+                            background: bg3, width: "100%", touchAction: "none", cursor: estVerrouille ? "not-allowed" : "crosshair"
+                          }}/>
+                          {!estVerrouille && (
+                            <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+                              <button onClick={() => sigDelPad.current?.clear()} style={{ flex: 1, padding: "8px", background: bg3, color: txt2, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
+                                🗑️ Effacer
+                              </button>
+                              <button onClick={() => handleSigner("delegue")} disabled={saving} style={{ flex: 1, padding: "8px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>
+                                ✅ Valider
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Signature enseignant */}
+                        <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "16px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✍️</div>
+                            <div>
+                              <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>Enseignant</p>
+                              <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>
+                                {selected.statut === "cloture" ? "✅ Signé" : "En attente"}
+                              </p>
+                            </div>
+                          </div>
+                          <canvas ref={sigEnsRef} width={300} height={120} style={{
+                            border: `1.5px dashed ${brd}`, borderRadius: "8px",
+                            background: bg3, width: "100%", touchAction: "none", cursor: estVerrouille ? "not-allowed" : "crosshair"
+                          }}/>
+                          {!estVerrouille && (
+                            <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+                              <button onClick={() => sigEnsPad.current?.clear()} style={{ flex: 1, padding: "8px", background: bg3, color: txt2, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
+                                🗑️ Effacer
+                              </button>
+                              <button onClick={() => handleSigner("enseignant")} disabled={saving} style={{ flex: 1, padding: "8px", background: "#534AB7", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>
+                                ✅ Valider
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ textAlign: "center", padding: "3rem" }}>
-                        <p style={{ fontSize: "32px" }}>📚</p>
-                        <p style={{ color: txt2, fontSize: "13px" }}>Aucun travail demandé pour ce cahier</p>
-                      </div>
+
+                      {/* Clôturer */}
+                      {!estVerrouille && (
+                        <div style={{ display: "flex", gap: "10px" }}>
+                          <button onClick={handleCloture} disabled={saving} style={{
+                            flex: 1, padding: "12px", background: "#0F6E56", color: "#fff",
+                            border: "none", borderRadius: "10px", fontSize: "14px",
+                            fontWeight: "500", cursor: "pointer"
+                          }}>
+                            {saving ? "⏳..." : "🔒 Clôturer la séance"}
+                          </button>
+                          <button style={{
+                            padding: "12px 20px", background: "#FCEBEB", color: "#791F1F",
+                            border: "0.5px solid #F09595", borderRadius: "10px",
+                            fontSize: "14px", cursor: "pointer"
+                          }}>⚠️ Signaler incident</button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
