@@ -64,13 +64,19 @@ export default function EmploiTempsPage() {
     });
 
     // Matières et salles statiques pour démo
-    setMatieres([
-      { id: 1, libelle: "Réseaux Informatiques" },
-      { id: 2, libelle: "Programmation Orientée Objet" },
-      { id: 3, libelle: "Bases de Données Avancées" },
-      { id: 4, libelle: "Développement Web" },
-      { id: 5, libelle: "Systèmes d exploitation" },
-    ]);
+    // Charger matières depuis l'API
+axios.get(`${API}/matieres.php`, {
+  headers: { Authorization: `Bearer ${token}` }
+}).then(res => {
+  if (res.data.succes) setMatieres(res.data.data);
+});
+
+// Charger salles depuis l'API
+axios.get(`${API}/salles.php`, {
+  headers: { Authorization: `Bearer ${token}` }
+}).then(res => {
+  if (res.data.succes) setSalles(res.data.data);
+});
     setSalles([
       { id: 1, code: "A01" },
       { id: 2, code: "A02" },
@@ -142,36 +148,50 @@ export default function EmploiTempsPage() {
     }
   };
 
-  const handleCreerCreneau = async () => {
-    try {
-      // Vérifier si un planning existe pour cette classe
-      let planningId = plannings[0]?.id;
-      if (!planningId) {
-        // Créer un planning
-        const res = await axios.post(`${API}/emploi_temps.php`, {
-          id_classe: form.id_classe || classeId,
-          semaine_debut: "2026-04-14",
-          creneaux: [form]
-        }, { headers: { Authorization: `Bearer ${token}` } });
-        if (res.data.succes) {
-          setMessage("✅ Créneau créé avec succès !");
-          setTimeout(() => setMessage(""), 3000);
-        }
-      } else {
-        setMessage("✅ Créneau ajouté au planning !");
-        setTimeout(() => setMessage(""), 3000);
-      }
+ const handleCreerCreneau = async () => {
+  if (!form.id_matiere || !form.id_enseignant || !form.id_salle) {
+    setMessage("⚠️ Veuillez remplir tous les champs !");
+    setTimeout(() => setMessage(""), 3000);
+    return;
+  }
+
+  try {
+    const res = await axios.post(`${API}/emploi_temps.php`, {
+      id_classe:    classeId,
+      semaine_debut: "2026-04-14",
+      creneaux: [{
+        id_matiere:    form.id_matiere,
+        id_enseignant: form.id_enseignant,
+        id_salle:      form.id_salle,
+        jour:          form.jour,
+        heure_debut:   form.heure_debut + ":00",
+        heure_fin:     form.heure_fin + ":00",
+      }]
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (res.data.succes) {
+      setMessage("✅ Créneau créé avec succès !");
       setShowModal(false);
-      // Recharger
-      const res = await axios.get(`${API}/emploi_temps.php?id_classe=${classeId}`, {
+      setForm({
+        id_classe: classeId, id_matiere: "", id_enseignant: "",
+        id_salle: "", jour: "Lundi", heure_debut: "08:00", heure_fin: "10:00"
+      });
+      // Recharger les plannings
+      const res2 = await axios.get(`${API}/emploi_temps.php?id_classe=${classeId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.data.succes) setPlannings(res.data.data);
-    } catch (err) {
-      setMessage("❌ Erreur lors de la création");
-      setTimeout(() => setMessage(""), 3000);
+      if (res2.data.succes) setPlannings(res2.data.data);
+    } else {
+      setMessage(`❌ ${res.data.message}`);
     }
-  };
+  } catch (err) {
+    setMessage(`❌ ${err.response?.data?.message || "Erreur lors de la création"}`);
+  } finally {
+    setTimeout(() => setMessage(""), 4000);
+  }
+};
 
   const menuItems = [
     { label: "Tableau de bord", icon: "⊞",  route: "/dashboard/admin" },
@@ -559,6 +579,46 @@ export default function EmploiTempsPage() {
                       border: "none", borderRadius: "8px", fontSize: "13px",
                       cursor: "pointer", fontWeight: "500"
                     }}>📱 Voir QR-Code</button>
+                    <button onClick={() => {
+  setForm({
+    id_classe: classeId,
+    id_matiere: creneauSelec.id_matiere || "",
+    id_enseignant: creneauSelec.id_enseignant || "",
+    id_salle: creneauSelec.id_salle || "",
+    jour: creneauSelec.jour,
+    heure_debut: creneauSelec.heure_debut?.slice(0,5) || "08:00",
+    heure_fin: creneauSelec.heure_fin?.slice(0,5) || "10:00",
+    id_creneau: creneauSelec.id
+  });
+  setCreneauSelec(null);
+  setShowModal(true);
+}} style={{
+  flex: 1, padding: "10px", background: "#FAEEDA", color: "#633806",
+  border: "0.5px solid #E8C97A", borderRadius: "8px",
+  fontSize: "13px", cursor: "pointer", fontWeight: "500"
+}}>✏️ Modifier</button>
+
+<button onClick={async () => {
+  if (!window.confirm("Supprimer ce créneau ?")) return;
+  try {
+    await axios.delete(`${API}/emploi_temps.php?id=${creneauSelec.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    setCreneauSelec(null);
+    setMessage("✅ Créneau supprimé !");
+    const res = await axios.get(`${API}/emploi_temps.php?id_classe=${classeId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.data.succes) setPlannings(res.data.data);
+    setTimeout(() => setMessage(""), 3000);
+  } catch (err) {
+    setMessage("❌ Erreur lors de la suppression");
+  }
+}} style={{
+  flex: 1, padding: "10px", background: "#FCEBEB", color: "#791F1F",
+  border: "0.5px solid #F09595", borderRadius: "8px",
+  fontSize: "13px", cursor: "pointer", fontWeight: "500"
+}}>🗑️ Supprimer</button>
                     <button onClick={() => setCreneauSelec(null)} style={{
                       flex: 1, padding: "10px", background: bg3, color: txt,
                       border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "13px", cursor: "pointer"

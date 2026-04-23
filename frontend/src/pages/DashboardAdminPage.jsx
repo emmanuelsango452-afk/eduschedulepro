@@ -105,6 +105,7 @@ export default function DashboardAdminPage() {
     { id: "vacations", label: "Vacations",         icon: "💰", route: "/vacations" },
     { id: "enseignants", label: "Enseignants",     icon: "👨‍🏫", route: "/enseignants" },
     { id: "rapports",  label: "Rapports",          icon: "📊", route: "/rapports" },
+    { id: "referentiels", label: "🗂️ Référentiels", icon: "🗂️", route: "/referentiels" },
   ];
 
   return (
