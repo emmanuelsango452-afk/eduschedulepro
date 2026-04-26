@@ -2,12 +2,6 @@
 // ============================================================
 //  EduTrack Pro — Endpoint Cahiers de Texte
 //  Fichier : backend/api/cahiers.php
-//  Routes :
-//    GET  /api/cahiers?id_creneau=X  → Liste/détail cahiers
-//    POST /api/cahiers               → Créer un cahier
-//    PUT  /api/cahiers?id=X          → Modifier un cahier
-//    POST /api/cahiers?id=X&action=signer  → Signer
-//    POST /api/cahiers?id=X&action=cloture → Clôturer
 // ============================================================
 
 require_once __DIR__ . '/../config/constants.php';
@@ -29,6 +23,8 @@ if ($methode === 'GET') {
     cloturerSeance($id, $donnees);
 } elseif ($methode === 'PUT') {
     modifierCahier($id, $donnees);
+} elseif ($methode === 'DELETE') {
+    supprimerCahier($id);
 } else {
     http_response_code(405);
     echo json_encode(["succes" => false, "message" => "Méthode non autorisée."]);
@@ -41,7 +37,6 @@ function listerCahiers($id) {
     $pdo = $db->connecter();
 
     if ($id) {
-        // Détail complet d'un cahier avec signatures et travaux
         $stmt = $pdo->prepare("
             SELECT ct.*,
                    m.libelle AS matiere,
@@ -64,19 +59,15 @@ function listerCahiers($id) {
             return;
         }
 
-        // Récupérer les signatures
         $stmt2 = $pdo->prepare("SELECT * FROM signatures WHERE id_cahier = ?");
         $stmt2->execute([$id]);
         $cahier['signatures'] = $stmt2->fetchAll();
 
-        // Récupérer les travaux
         $stmt3 = $pdo->prepare("SELECT * FROM travaux_demandes WHERE id_cahier = ?");
         $stmt3->execute([$id]);
         $cahier['travaux'] = $stmt3->fetchAll();
 
-        // Décoder le contenu JSON
         $cahier['contenu_json'] = json_decode($cahier['contenu_json'], true);
-
         echo json_encode(["succes" => true, "data" => $cahier]);
     } else {
         $where  = "WHERE 1=1";
@@ -97,6 +88,7 @@ function listerCahiers($id) {
 
         $stmt = $pdo->prepare("
             SELECT ct.id, ct.titre_cours, ct.statut, ct.date_creation,
+                   ct.niveau_avancement, ct.heure_fin_reelle, ct.contenu_json,
                    m.libelle AS matiere, c.libelle AS classe,
                    CONCAT(e.prenom, ' ', e.nom) AS enseignant
             FROM cahiers_texte ct
@@ -109,13 +101,19 @@ function listerCahiers($id) {
             ORDER BY ct.date_creation DESC
         ");
         $stmt->execute($params);
-        echo json_encode(["succes" => true, "data" => $stmt->fetchAll()]);
+        $cahiers = $stmt->fetchAll();
+
+        foreach ($cahiers as &$cahier) {
+            $cahier['contenu_json'] = json_decode($cahier['contenu_json'], true);
+        }
+
+        echo json_encode(["succes" => true, "data" => $cahiers]);
     }
 }
 
 // ============================================================
 function creerCahier($donnees) {
-    $utilisateur = AuthJWT::proteger(['delegue']);
+    $utilisateur = AuthJWT::proteger();
 
     if (empty($donnees['id_creneau'])) {
         http_response_code(400);
@@ -126,23 +124,29 @@ function creerCahier($donnees) {
     $db  = new Database();
     $pdo = $db->connecter();
 
-    $stmt = $pdo->prepare("
+    $stmt = $pdo->prepare("SELECT id FROM cahiers_texte WHERE id_creneau = ?");
+    $stmt->execute([$donnees['id_creneau']]);
+    if ($stmt->fetch()) {
+        http_response_code(409);
+        echo json_encode(["succes" => false, "message" => "Un cahier existe déjà pour ce créneau."]);
+        return;
+    }
+
+    $stmt2 = $pdo->prepare("
         INSERT INTO cahiers_texte
-        (id_creneau, id_delegue, titre_cours, contenu_json,
-         niveau_avancement, statut)
+        (id_creneau, id_delegue, titre_cours, contenu_json, niveau_avancement, statut)
         VALUES (?, ?, ?, ?, ?, 'brouillon')
     ");
-    $stmt->execute([
+    $stmt2->execute([
         $donnees['id_creneau'],
         $utilisateur['id'],
-        $donnees['titre_cours']        ?? null,
+        $donnees['titre_cours']       ?? null,
         json_encode($donnees['contenu_json'] ?? []),
-        $donnees['niveau_avancement']  ?? null
+        $donnees['niveau_avancement'] ?? null
     ]);
 
     $id_cahier = $pdo->lastInsertId();
 
-    // Ajouter les travaux si fournis
     if (!empty($donnees['travaux'])) {
         foreach ($donnees['travaux'] as $travail) {
             $pdo->prepare("
@@ -152,7 +156,7 @@ function creerCahier($donnees) {
                 $id_cahier,
                 $travail['description'],
                 $travail['date_limite'] ?? null,
-                $travail['type'] ?? 'exercice'
+                $travail['type']        ?? 'exercice'
             ]);
         }
     }
@@ -167,51 +171,7 @@ function creerCahier($donnees) {
 
 // ============================================================
 function signerCahier($id, $donnees) {
-    $utilisateur = AuthJWT::proteger(['delegue', 'enseignant']);
-
-    if (!$id || empty($donnees['signature_base64']) || empty($donnees['type'])) {
-        http_response_code(400);
-        echo json_encode(["succes" => false, "message" => "ID, signature et type requis."]);
-        return;
-    }
-
-    $db  = new Database();
-    $pdo = $db->connecter();
-
-    // Vérifier que le cahier existe
-    $stmt = $pdo->prepare("SELECT * FROM cahiers_texte WHERE id = ?");
-    $stmt->execute([$id]);
-    $cahier = $stmt->fetch();
-
-    if (!$cahier || $cahier['statut'] === 'cloture') {
-        http_response_code(400);
-        echo json_encode(["succes" => false, "message" => "Cahier introuvable ou déjà clôturé."]);
-        return;
-    }
-
-    // Enregistrer la signature
-    $stmt2 = $pdo->prepare("
-        INSERT INTO signatures (id_cahier, type_signataire, id_utilisateur, signature_base64)
-        VALUES (?, ?, ?, ?)
-    ");
-    $stmt2->execute([
-        $id,
-        $donnees['type'],
-        $utilisateur['id'],
-        $donnees['signature_base64']
-    ]);
-
-    // Mettre à jour le statut du cahier
-    $nouveau_statut = $donnees['type'] === 'delegue' ? 'signe_delegue' : 'signe_delegue';
-    $pdo->prepare("UPDATE cahiers_texte SET statut = ? WHERE id = ?")
-        ->execute([$nouveau_statut, $id]);
-
-    echo json_encode(["succes" => true, "message" => "Signature enregistrée avec succès."]);
-}
-
-// ============================================================
-function cloturerSeance($id, $donnees) {
-    $utilisateur = AuthJWT::proteger(['enseignant']);
+    $utilisateur = AuthJWT::proteger();
 
     if (!$id) {
         http_response_code(400);
@@ -222,7 +182,70 @@ function cloturerSeance($id, $donnees) {
     $db  = new Database();
     $pdo = $db->connecter();
 
-    // Enregistrer l'heure de fin et clôturer
+    $stmt = $pdo->prepare("SELECT * FROM cahiers_texte WHERE id = ?");
+    $stmt->execute([$id]);
+    $cahier = $stmt->fetch();
+
+    if (!$cahier) {
+        http_response_code(404);
+        echo json_encode(["succes" => false, "message" => "Cahier introuvable."]);
+        return;
+    }
+
+    if ($cahier['statut'] === 'cloture') {
+        http_response_code(400);
+        echo json_encode(["succes" => false, "message" => "Cahier déjà clôturé."]);
+        return;
+    }
+
+    $type = $donnees['type'] ?? 'delegue';
+
+    $pdo->prepare("DELETE FROM signatures WHERE id_cahier = ? AND type_signataire = ?")
+        ->execute([$id, $type]);
+
+    $pdo->prepare("
+        INSERT INTO signatures (id_cahier, type_signataire, id_utilisateur, signature_base64, date_signature)
+        VALUES (?, ?, ?, ?, NOW())
+    ")->execute([
+        $id,
+        $type,
+        $utilisateur['id'],
+        $donnees['signature_base64'] ?? null
+    ]);
+
+    $pdo->prepare("UPDATE cahiers_texte SET statut = 'signe_delegue' WHERE id = ?")
+        ->execute([$id]);
+
+    echo json_encode([
+        "succes"  => true,
+        "message" => "Signature enregistrée avec succès.",
+        "statut"  => "signe_delegue"
+    ]);
+}
+
+// ============================================================
+function cloturerSeance($id, $donnees) {
+    $utilisateur = AuthJWT::proteger();
+
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(["succes" => false, "message" => "ID requis."]);
+        return;
+    }
+
+    $db  = new Database();
+    $pdo = $db->connecter();
+
+    $stmt = $pdo->prepare("SELECT * FROM cahiers_texte WHERE id = ?");
+    $stmt->execute([$id]);
+    $cahier = $stmt->fetch();
+
+    if (!$cahier) {
+        http_response_code(404);
+        echo json_encode(["succes" => false, "message" => "Cahier introuvable."]);
+        return;
+    }
+
     $pdo->prepare("
         UPDATE cahiers_texte
         SET heure_fin_reelle = ?, statut = 'cloture'
@@ -232,45 +255,83 @@ function cloturerSeance($id, $donnees) {
         $id
     ]);
 
-    // Enregistrer la signature de l'enseignant si fournie
     if (!empty($donnees['signature_base64'])) {
+        $pdo->prepare("DELETE FROM signatures WHERE id_cahier = ? AND type_signataire = 'enseignant'")
+            ->execute([$id]);
         $pdo->prepare("
-            INSERT INTO signatures (id_cahier, type_signataire, id_utilisateur, signature_base64)
-            VALUES (?, 'enseignant', ?, ?)
+            INSERT INTO signatures (id_cahier, type_signataire, id_utilisateur, signature_base64, date_signature)
+            VALUES (?, 'enseignant', ?, ?, NOW())
         ")->execute([$id, $utilisateur['id'], $donnees['signature_base64']]);
     }
 
-    echo json_encode(["succes" => true, "message" => "Séance clôturée avec succès."]);
+    echo json_encode([
+        "succes"  => true,
+        "message" => "Séance clôturée avec succès.",
+        "statut"  => "cloture"
+    ]);
 }
 
 // ============================================================
 function modifierCahier($id, $donnees) {
-    $utilisateur = AuthJWT::proteger(['delegue']);
+    $utilisateur = AuthJWT::proteger();
+
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(["succes" => false, "message" => "ID requis."]);
+        return;
+    }
 
     $db  = new Database();
     $pdo = $db->connecter();
 
-    // Vérifier que le cahier est encore en brouillon
     $stmt = $pdo->prepare("SELECT statut FROM cahiers_texte WHERE id = ?");
     $stmt->execute([$id]);
     $cahier = $stmt->fetch();
 
-    if (!$cahier || $cahier['statut'] !== 'brouillon') {
+    if (!$cahier) {
+        http_response_code(404);
+        echo json_encode(["succes" => false, "message" => "Cahier introuvable."]);
+        return;
+    }
+
+    if ($cahier['statut'] === 'cloture') {
         http_response_code(400);
-        echo json_encode(["succes" => false, "message" => "Cahier non modifiable."]);
+        echo json_encode(["succes" => false, "message" => "Cahier clôturé, modification impossible."]);
         return;
     }
 
     $pdo->prepare("
         UPDATE cahiers_texte
-        SET titre_cours = ?, contenu_json = ?, niveau_avancement = ?
+        SET titre_cours = ?, contenu_json = ?,
+            niveau_avancement = ?, heure_fin_reelle = ?
         WHERE id = ?
     ")->execute([
         $donnees['titre_cours']       ?? null,
         json_encode($donnees['contenu_json'] ?? []),
         $donnees['niveau_avancement'] ?? null,
+        $donnees['heure_fin']         ?? null,
         $id
     ]);
 
     echo json_encode(["succes" => true, "message" => "Cahier modifié avec succès."]);
+}
+
+// ============================================================
+function supprimerCahier($id) {
+    $utilisateur = AuthJWT::proteger(['administrateur']);
+
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(["succes" => false, "message" => "ID requis."]);
+        return;
+    }
+
+    $db  = new Database();
+    $pdo = $db->connecter();
+
+    $pdo->prepare("DELETE FROM signatures WHERE id_cahier = ?")->execute([$id]);
+    $pdo->prepare("DELETE FROM travaux_demandes WHERE id_cahier = ?")->execute([$id]);
+    $pdo->prepare("DELETE FROM cahiers_texte WHERE id = ?")->execute([$id]);
+
+    echo json_encode(["succes" => true, "message" => "Cahier supprimé avec succès."]);
 }

@@ -101,11 +101,11 @@ function App() {
           }/>
 
           {/* Cahier de texte */}
-          <Route path="/cahiers" element={
-            <PrivateRoute roles={["administrateur", "delegue", "enseignant"]}>
-              <CahierTextePage />
-            </PrivateRoute>
-          }/>
+<Route path="/cahiers" element={
+  <PrivateRoute roles={["administrateur", "delegue", "enseignant", "surveillant"]}>
+    <CahierTextePage />
+  </PrivateRoute>
+}/>
 
           {/* Vacations */}
           <Route path="/vacations" element={

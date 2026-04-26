@@ -17,12 +17,12 @@ export default function CahierTextePage() {
   const [onglet, setOnglet]           = useState("detail");
   const [filtre, setFiltre]           = useState("tous");
   const [search, setSearch]           = useState("");
+  const [showModalAjouter, setShowModalAjouter] = useState(false);
+  const [creneaux, setCreneaux]       = useState([]);
+  const [formNouveauCahier, setFormNouveauCahier] = useState({ id_creneau: "" });
   const [formContenu, setFormContenu] = useState({
-    titre_cours: "",
-    points_vus: "",
-    niveau_avancement: "",
-    observations: "",
-    heure_fin: "",
+    titre_cours: "", points_vus: "", niveau_avancement: "",
+    observations: "", heure_fin: "",
   });
   const [travaux, setTravaux]         = useState([]);
   const [nouveauTravail, setNouveauTravail] = useState({
@@ -43,13 +43,35 @@ export default function CahierTextePage() {
   const txt2 = dark ? "#8b949e" : "#5F5E5A";
   const brd  = dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
 
+  const chargerCahiers = async () => {
+    try {
+      const res = await axios.get(`${API}/cahiers.php`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.succes) setCahiers(res.data.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    axios.get(`${API}/cahiers.php`, {
+    chargerCahiers();
+    // Charger les créneaux pour le formulaire d'ajout
+    axios.get(`${API}/emploi_temps.php`, {
       headers: { Authorization: `Bearer ${token}` }
     }).then(res => {
-      if (res.data.succes) setCahiers(res.data.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+      if (res.data.succes) {
+        const allCreneaux = [];
+        res.data.data.forEach(p => {
+          if (p.creneaux) p.creneaux.forEach(cr => {
+            if (cr) allCreneaux.push(cr);
+          });
+        });
+        setCreneaux(allCreneaux);
+      }
+    });
   }, [token]);
 
   useEffect(() => {
@@ -64,15 +86,20 @@ export default function CahierTextePage() {
   useEffect(() => {
     if (selected) {
       setFormContenu({
-        titre_cours:        selected.titre_cours || "",
-        points_vus:         selected.contenu_json?.points?.join("\n") || "",
-        niveau_avancement:  selected.niveau_avancement || "",
-        observations:       selected.contenu_json?.observations || "",
-        heure_fin:          selected.heure_fin_reelle || "",
+        titre_cours:       selected.titre_cours || "",
+        points_vus:        selected.contenu_json?.points?.join("\n") || "",
+        niveau_avancement: selected.niveau_avancement || "",
+        observations:      selected.contenu_json?.observations || "",
+        heure_fin:         selected.heure_fin_reelle || "",
       });
       setTravaux(selected.travaux || []);
     }
   }, [selected]);
+
+  const showMsg = (msg) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(""), 3000);
+  };
 
   const getStatut = (statut) => {
     const cfg = {
@@ -101,6 +128,48 @@ export default function CahierTextePage() {
     cloture:   cahiers.filter(c => c.statut === "cloture").length,
   };
 
+  // ---- Ajouter un cahier ----
+  const handleAjouterCahier = async () => {
+    if (!formNouveauCahier.id_creneau) {
+      showMsg("⚠️ Sélectionnez un créneau !");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await axios.post(`${API}/cahiers.php`, {
+        id_creneau: formNouveauCahier.id_creneau
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.data.succes) {
+        showMsg("✅ Cahier créé avec succès !");
+        setShowModalAjouter(false);
+        setFormNouveauCahier({ id_creneau: "" });
+        chargerCahiers();
+      } else {
+        showMsg(`❌ ${res.data.message}`);
+      }
+    } catch (err) {
+      showMsg(`❌ ${err.response?.data?.message || "Erreur lors de la création"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ---- Supprimer un cahier ----
+  const handleSupprimerCahier = async (id) => {
+    if (!window.confirm("Supprimer ce cahier ? Cette action est irréversible.")) return;
+    try {
+      await axios.delete(`${API}/cahiers.php?id=${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      showMsg("✅ Cahier supprimé !");
+      setSelected(null);
+      chargerCahiers();
+    } catch (err) {
+      showMsg("❌ Erreur lors de la suppression");
+    }
+  };
+
+  // ---- Sauvegarder contenu ----
   const handleSauvegarder = async () => {
     if (!selected || estVerrouille) return;
     setSaving(true);
@@ -112,16 +181,18 @@ export default function CahierTextePage() {
           observations: formContenu.observations
         },
         niveau_avancement: formContenu.niveau_avancement,
+        heure_fin:         formContenu.heure_fin,
       }, { headers: { Authorization: `Bearer ${token}` } });
-      setMessage("✅ Cahier sauvegardé !");
-      setTimeout(() => setMessage(""), 3000);
+      showMsg("✅ Cahier sauvegardé !");
+      chargerCahiers();
     } catch (err) {
-      setMessage("❌ Erreur lors de la sauvegarde");
+      showMsg("❌ Erreur lors de la sauvegarde");
     } finally {
       setSaving(false);
     }
   };
 
+  // ---- Clôturer ----
   const handleCloture = async () => {
     if (!selected) return;
     setSaving(true);
@@ -131,22 +202,21 @@ export default function CahierTextePage() {
         heure_fin:        formContenu.heure_fin || new Date().toTimeString().slice(0,8),
         signature_base64: sigBase64
       }, { headers: { Authorization: `Bearer ${token}` } });
-      setMessage("✅ Séance clôturée !");
-      const res = await axios.get(`${API}/cahiers.php`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.data.succes) setCahiers(res.data.data);
-      setTimeout(() => setMessage(""), 3000);
+      showMsg("✅ Séance clôturée !");
+      chargerCahiers();
+      setSelected(prev => prev ? { ...prev, statut: "cloture" } : null);
     } catch (err) {
-      setMessage("❌ Erreur lors de la clôture");
+      showMsg(`❌ ${err.response?.data?.message || "Erreur lors de la clôture"}`);
     } finally {
       setSaving(false);
     }
   };
 
+  // ---- Signer ----
   const handleSigner = async (type) => {
     const pad = type === "delegue" ? sigDelPad.current : sigEnsPad.current;
     if (!pad || pad.isEmpty()) {
-      setMessage("⚠️ Veuillez d'abord signer !");
-      setTimeout(() => setMessage(""), 3000);
+      showMsg("⚠️ Veuillez d'abord dessiner votre signature !");
       return;
     }
     setSaving(true);
@@ -155,10 +225,11 @@ export default function CahierTextePage() {
         type:             type,
         signature_base64: pad.toDataURL()
       }, { headers: { Authorization: `Bearer ${token}` } });
-      setMessage(`✅ Signature ${type} enregistrée !`);
-      setTimeout(() => setMessage(""), 3000);
+      showMsg(`✅ Signature ${type === "delegue" ? "délégué" : "enseignant"} enregistrée !`);
+      chargerCahiers();
+      setSelected(prev => prev ? { ...prev, statut: "signe_delegue" } : null);
     } catch (err) {
-      setMessage("❌ Erreur lors de la signature");
+      showMsg(`❌ ${err.response?.data?.message || "Erreur lors de la signature"}`);
     } finally {
       setSaving(false);
     }
@@ -220,10 +291,15 @@ export default function CahierTextePage() {
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             {message && (
-              <div style={{ padding: "6px 12px", background: message.includes("✅") ? "#E1F5EE" : "#FCEBEB", color: message.includes("✅") ? "#085041" : "#791F1F", borderRadius: "8px", fontSize: "12px", fontWeight: "500" }}>
+              <div style={{ padding: "6px 12px", background: message.includes("✅") ? "#E1F5EE" : message.includes("⚠️") ? "#FAEEDA" : "#FCEBEB", color: message.includes("✅") ? "#085041" : message.includes("⚠️") ? "#633806" : "#791F1F", borderRadius: "8px", fontSize: "12px", fontWeight: "500" }}>
                 {message}
               </div>
             )}
+            <button onClick={() => setShowModalAjouter(true)} style={{
+              padding: "8px 16px", background: "#0F6E56", color: "#fff",
+              border: "none", borderRadius: "8px", fontSize: "12px",
+              cursor: "pointer", fontWeight: "500"
+            }}>+ Nouveau cahier</button>
             <button onClick={() => setDark(!dark)} style={{ width: "36px", height: "36px", background: bg3, borderRadius: "8px", border: `0.5px solid ${brd}`, cursor: "pointer", fontSize: "16px" }}>
               {dark ? "☀️" : "🌙"}
             </button>
@@ -273,6 +349,9 @@ export default function CahierTextePage() {
                 <div style={{ textAlign: "center", padding: "2rem" }}>
                   <p style={{ fontSize: "32px" }}>📝</p>
                   <p style={{ color: txt2, fontSize: "13px" }}>Aucun cahier trouvé</p>
+                  <button onClick={() => setShowModalAjouter(true)} style={{ padding: "8px 16px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", marginTop: "8px" }}>
+                    + Créer un cahier
+                  </button>
                 </div>
               ) : (
                 cahiersFiltres.map((c, i) => {
@@ -292,11 +371,12 @@ export default function CahierTextePage() {
                         </span>
                       </div>
                       <p style={{ fontSize: "12px", color: txt2, margin: "0 0 3px" }}>{c.classe}</p>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>{c.enseignant?.split(" ").slice(-1)[0]}</p>
-                        <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>
-                          {c.date_creation ? new Date(c.date_creation).toLocaleDateString("fr-FR") : ""}
-                        </p>
+                        <button onClick={(e) => { e.stopPropagation(); handleSupprimerCahier(c.id); }} style={{
+                          padding: "2px 6px", background: "#FCEBEB", color: "#791F1F",
+                          border: "none", borderRadius: "4px", fontSize: "10px", cursor: "pointer"
+                        }}>🗑️</button>
                       </div>
                     </div>
                   );
@@ -334,9 +414,14 @@ export default function CahierTextePage() {
                       )}
                     </div>
                   </div>
-                  <button style={{ padding: "6px 14px", background: "#E1F5EE", color: "#085041", border: "0.5px solid #9FE1CB", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
-                    📄 Exporter PDF
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button style={{ padding: "6px 14px", background: "#E1F5EE", color: "#085041", border: "0.5px solid #9FE1CB", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
+                      📄 Exporter PDF
+                    </button>
+                    <button onClick={() => handleSupprimerCahier(selected.id)} style={{ padding: "6px 14px", background: "#FCEBEB", color: "#791F1F", border: "0.5px solid #F09595", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
+                      🗑️ Supprimer
+                    </button>
+                  </div>
                 </div>
 
                 {/* Étapes du processus */}
@@ -394,19 +479,18 @@ export default function CahierTextePage() {
 
                   {onglet === "detail" && (
                     <div>
-                      {/* Infos automatiques */}
                       <div style={{ background: bg3, borderRadius: "10px", padding: "12px 16px", marginBottom: "16px" }}>
                         <p style={{ fontSize: "12px", color: txt2, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: "500" }}>
                           Informations automatiques
                         </p>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
                           {[
-                            { label: "Classe",       val: selected.classe },
-                            { label: "Matière",      val: selected.matiere },
-                            { label: "Enseignant",   val: selected.enseignant },
-                            { label: "Date",         val: selected.date_creation ? new Date(selected.date_creation).toLocaleDateString("fr-FR") : "—" },
+                            { label: "Classe",           val: selected.classe },
+                            { label: "Matière",          val: selected.matiere },
+                            { label: "Enseignant",       val: selected.enseignant },
+                            { label: "Date",             val: selected.date_creation ? new Date(selected.date_creation).toLocaleDateString("fr-FR") : "—" },
                             { label: "Heure début (QR)", val: "08h07 ✓" },
-                            { label: "Heure fin",    val: selected.heure_fin_reelle || "En cours..." },
+                            { label: "Heure fin",        val: selected.heure_fin_reelle || "En cours..." },
                           ].map(item => (
                             <div key={item.label} style={{ background: bg2, borderRadius: "8px", padding: "8px 10px" }}>
                               <p style={{ fontSize: "10px", color: txt2, margin: "0 0 3px" }}>{item.label}</p>
@@ -416,114 +500,42 @@ export default function CahierTextePage() {
                         </div>
                       </div>
 
-                      {/* Champs à remplir par le délégué */}
                       <div style={{ marginBottom: "12px" }}>
                         <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
                           📌 Titre du cours <span style={{ color: "#E24B4A" }}>*</span>
                         </label>
-                        <input
-                          type="text"
-                          value={formContenu.titre_cours}
-                          onChange={e => setFormContenu({...formContenu, titre_cours: e.target.value})}
-                          placeholder="Ex: Introduction aux protocoles TCP/IP"
-                          disabled={estVerrouille}
-                          style={{
-                            width: "100%", boxSizing: "border-box", padding: "10px 12px",
-                            borderRadius: "8px", border: `0.5px solid ${brd}`,
-                            background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px"
-                          }}
-                        />
+                        <input type="text" value={formContenu.titre_cours} onChange={e => setFormContenu({...formContenu, titre_cours: e.target.value})} placeholder="Ex: Introduction aux protocoles TCP/IP" disabled={estVerrouille} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px" }}/>
                       </div>
 
                       <div style={{ marginBottom: "12px" }}>
                         <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
                           📋 Points vus dans le cours <span style={{ color: "#E24B4A" }}>*</span>
                         </label>
-                        <textarea
-                          value={formContenu.points_vus}
-                          onChange={e => setFormContenu({...formContenu, points_vus: e.target.value})}
-                          placeholder="Un point par ligne&#10;Ex: Modèle OSI&#10;Protocole IP&#10;Adressage IPv4"
-                          disabled={estVerrouille}
-                          rows={4}
-                          style={{
-                            width: "100%", boxSizing: "border-box", padding: "10px 12px",
-                            borderRadius: "8px", border: `0.5px solid ${brd}`,
-                            background: estVerrouille ? bg3 : bg2, color: txt,
-                            fontSize: "13px", resize: "vertical", fontFamily: "inherit"
-                          }}
-                        />
+                        <textarea value={formContenu.points_vus} onChange={e => setFormContenu({...formContenu, points_vus: e.target.value})} placeholder="Un point par ligne&#10;Ex: Modèle OSI&#10;Protocole IP" disabled={estVerrouille} rows={4} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px", resize: "vertical", fontFamily: "inherit" }}/>
                       </div>
 
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                         <div>
-                          <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
-                            📊 Niveau d'avancement
-                          </label>
-                          <input
-                            type="text"
-                            value={formContenu.niveau_avancement}
-                            onChange={e => setFormContenu({...formContenu, niveau_avancement: e.target.value})}
-                            placeholder="Ex: Chapitre 2 / 5 — 40%"
-                            disabled={estVerrouille}
-                            style={{
-                              width: "100%", boxSizing: "border-box", padding: "10px 12px",
-                              borderRadius: "8px", border: `0.5px solid ${brd}`,
-                              background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px"
-                            }}
-                          />
+                          <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>📊 Niveau d'avancement</label>
+                          <input type="text" value={formContenu.niveau_avancement} onChange={e => setFormContenu({...formContenu, niveau_avancement: e.target.value})} placeholder="Ex: Chapitre 2 / 5 — 40%" disabled={estVerrouille} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px" }}/>
                         </div>
                         <div>
-                          <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
-                            ⏰ Heure de fin réelle
-                          </label>
-                          <input
-                            type="time"
-                            value={formContenu.heure_fin}
-                            onChange={e => setFormContenu({...formContenu, heure_fin: e.target.value})}
-                            disabled={estVerrouille}
-                            style={{
-                              width: "100%", boxSizing: "border-box", padding: "10px 12px",
-                              borderRadius: "8px", border: `0.5px solid ${brd}`,
-                              background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px"
-                            }}
-                          />
+                          <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>⏰ Heure de fin réelle</label>
+                          <input type="time" value={formContenu.heure_fin} onChange={e => setFormContenu({...formContenu, heure_fin: e.target.value})} disabled={estVerrouille} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px" }}/>
                         </div>
                       </div>
 
                       <div style={{ marginBottom: "16px" }}>
-                        <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>
-                          💬 Observations (incidents, retards, absences)
-                        </label>
-                        <textarea
-                          value={formContenu.observations}
-                          onChange={e => setFormContenu({...formContenu, observations: e.target.value})}
-                          placeholder="Signaler tout incident, retard ou absence particulière..."
-                          disabled={estVerrouille}
-                          rows={3}
-                          style={{
-                            width: "100%", boxSizing: "border-box", padding: "10px 12px",
-                            borderRadius: "8px", border: `0.5px solid ${brd}`,
-                            background: estVerrouille ? bg3 : bg2, color: txt,
-                            fontSize: "13px", resize: "vertical", fontFamily: "inherit"
-                          }}
-                        />
+                        <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px", fontWeight: "500" }}>💬 Observations</label>
+                        <textarea value={formContenu.observations} onChange={e => setFormContenu({...formContenu, observations: e.target.value})} placeholder="Signaler tout incident, retard ou absence..." disabled={estVerrouille} rows={3} style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: estVerrouille ? bg3 : bg2, color: txt, fontSize: "13px", resize: "vertical", fontFamily: "inherit" }}/>
                       </div>
 
-                      {/* Boutons */}
                       {!estVerrouille && (
                         <div style={{ display: "flex", gap: "10px" }}>
-                          <button onClick={handleSauvegarder} disabled={saving} style={{
-                            flex: 1, padding: "11px", background: "#0F6E56", color: "#fff",
-                            border: "none", borderRadius: "8px", fontSize: "13px",
-                            fontWeight: "500", cursor: "pointer"
-                          }}>
+                          <button onClick={handleSauvegarder} disabled={saving} style={{ flex: 1, padding: "11px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "500", cursor: "pointer" }}>
                             {saving ? "⏳ Sauvegarde..." : "💾 Enregistrer brouillon"}
                           </button>
-                          <button onClick={() => setOnglet("signer")} style={{
-                            padding: "11px 20px", background: "#EEEDFE", color: "#3C3489",
-                            border: "0.5px solid #CECBF6", borderRadius: "8px",
-                            fontSize: "13px", cursor: "pointer", fontWeight: "500"
-                          }}>
+                          <button onClick={() => setOnglet("signer")} style={{ padding: "11px 20px", background: "#EEEDFE", color: "#3C3489", border: "0.5px solid #CECBF6", borderRadius: "8px", fontSize: "13px", cursor: "pointer", fontWeight: "500" }}>
                             ✍️ Signer →
                           </button>
                         </div>
@@ -533,7 +545,7 @@ export default function CahierTextePage() {
                         <div style={{ background: "#FCEBEB", borderRadius: "10px", padding: "12px 16px", display: "flex", gap: "10px", alignItems: "center" }}>
                           <span style={{ fontSize: "20px" }}>🔒</span>
                           <p style={{ fontSize: "13px", color: "#791F1F", margin: 0 }}>
-                            Cette fiche est verrouillée. Aucune modification n'est possible sans déverrouillage administrateur.
+                            Cette fiche est verrouillée. Aucune modification n'est possible.
                           </p>
                         </div>
                       )}
@@ -542,45 +554,22 @@ export default function CahierTextePage() {
 
                   {onglet === "travaux" && (
                     <div>
-                      <p style={{ fontSize: "13px", color: txt2, margin: "0 0 16px" }}>
-                        Devoirs, exercices et lectures à rendre par les étudiants.
-                      </p>
-
-                      {/* Ajouter travail */}
                       {!estVerrouille && (
                         <div style={{ background: bg3, borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
                           <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: "0 0 12px" }}>➕ Ajouter un travail</p>
-                          <div style={{ marginBottom: "10px" }}>
-                            <input
-                              type="text"
-                              placeholder="Description du travail..."
-                              value={nouveauTravail.description}
-                              onChange={e => setNouveauTravail({...nouveauTravail, description: e.target.value})}
-                              style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}
-                            />
-                          </div>
+                          <input type="text" placeholder="Description du travail..." value={nouveauTravail.description} onChange={e => setNouveauTravail({...nouveauTravail, description: e.target.value})} style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px", marginBottom: "10px" }}/>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
-                            <div>
-                              <label style={{ fontSize: "11px", color: txt2, display: "block", marginBottom: "4px" }}>Type</label>
-                              <select value={nouveauTravail.type} onChange={e => setNouveauTravail({...nouveauTravail, type: e.target.value})} style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}>
-                                <option value="exercice">Exercice</option>
-                                <option value="devoir">Devoir</option>
-                                <option value="projet">Projet</option>
-                                <option value="lecture">Lecture</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label style={{ fontSize: "11px", color: txt2, display: "block", marginBottom: "4px" }}>Date limite</label>
-                              <input type="date" value={nouveauTravail.date_limite} onChange={e => setNouveauTravail({...nouveauTravail, date_limite: e.target.value})} style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}/>
-                            </div>
+                            <select value={nouveauTravail.type} onChange={e => setNouveauTravail({...nouveauTravail, type: e.target.value})} style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}>
+                              <option value="exercice">Exercice</option>
+                              <option value="devoir">Devoir</option>
+                              <option value="projet">Projet</option>
+                              <option value="lecture">Lecture</option>
+                            </select>
+                            <input type="date" value={nouveauTravail.date_limite} onChange={e => setNouveauTravail({...nouveauTravail, date_limite: e.target.value})} style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg2, color: txt, fontSize: "13px" }}/>
                           </div>
-                          <button onClick={handleAjouterTravail} style={{ padding: "9px 20px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", cursor: "pointer", fontWeight: "500" }}>
-                            ➕ Ajouter
-                          </button>
+                          <button onClick={handleAjouterTravail} style={{ padding: "9px 20px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", cursor: "pointer", fontWeight: "500" }}>➕ Ajouter</button>
                         </div>
                       )}
-
-                      {/* Liste travaux */}
                       {travaux.length === 0 ? (
                         <div style={{ textAlign: "center", padding: "2rem" }}>
                           <p style={{ fontSize: "32px" }}>📚</p>
@@ -588,22 +577,13 @@ export default function CahierTextePage() {
                         </div>
                       ) : (
                         travaux.map((t, i) => {
-                          const typeCfg = {
-                            exercice: { bg: "#EEEDFE", color: "#3C3489" },
-                            devoir:   { bg: "#FAEEDA", color: "#633806" },
-                            projet:   { bg: "#E6F1FB", color: "#0C447C" },
-                            lecture:  { bg: "#E1F5EE", color: "#085041" },
-                          };
+                          const typeCfg = { exercice: { bg: "#EEEDFE", color: "#3C3489" }, devoir: { bg: "#FAEEDA", color: "#633806" }, projet: { bg: "#E6F1FB", color: "#0C447C" }, lecture: { bg: "#E1F5EE", color: "#085041" } };
                           const tc = typeCfg[t.type] || typeCfg.exercice;
                           return (
                             <div key={i} style={{ background: bg2, borderRadius: "10px", border: `0.5px solid ${brd}`, padding: "12px 16px", marginBottom: "8px", display: "flex", alignItems: "center", gap: "12px" }}>
-                              <span style={{ fontSize: "11px", background: tc.bg, color: tc.color, padding: "3px 8px", borderRadius: "20px", fontWeight: "500", flexShrink: 0 }}>
-                                {t.type}
-                              </span>
+                              <span style={{ fontSize: "11px", background: tc.bg, color: tc.color, padding: "3px 8px", borderRadius: "20px", fontWeight: "500", flexShrink: 0 }}>{t.type}</span>
                               <p style={{ fontSize: "13px", color: txt, margin: 0, flex: 1 }}>{t.description}</p>
-                              {t.date_limite && (
-                                <span style={{ fontSize: "11px", color: txt2, flexShrink: 0 }}>📅 {t.date_limite}</span>
-                              )}
+                              {t.date_limite && <span style={{ fontSize: "11px", color: txt2, flexShrink: 0 }}>📅 {t.date_limite}</span>}
                             </div>
                           );
                         })
@@ -616,16 +596,12 @@ export default function CahierTextePage() {
                       {estVerrouille ? (
                         <div style={{ background: "#E1F5EE", borderRadius: "10px", padding: "16px", marginBottom: "16px", display: "flex", gap: "10px", alignItems: "center" }}>
                           <span style={{ fontSize: "20px" }}>✅</span>
-                          <p style={{ fontSize: "13px", color: "#085041", margin: 0, fontWeight: "500" }}>
-                            Cette fiche est clôturée et signée par les deux parties.
-                          </p>
+                          <p style={{ fontSize: "13px", color: "#085041", margin: 0, fontWeight: "500" }}>Cette fiche est clôturée et signée par les deux parties.</p>
                         </div>
                       ) : (
                         <div style={{ background: bg3, borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", gap: "10px" }}>
                           <span style={{ fontSize: "20px" }}>ℹ️</span>
-                          <p style={{ fontSize: "13px", color: txt2, margin: 0 }}>
-                            Dessinez votre signature dans le cadre puis cliquez sur Valider. La signature sera horodatée et associée à votre compte.
-                          </p>
+                          <p style={{ fontSize: "13px", color: txt2, margin: 0 }}>Dessinez votre signature dans le cadre puis cliquez sur Valider.</p>
                         </div>
                       )}
 
@@ -636,23 +612,16 @@ export default function CahierTextePage() {
                             <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#E1F5EE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✍️</div>
                             <div>
                               <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>Délégué de classe</p>
-                              <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>
+                              <p style={{ fontSize: "11px", color: selected.statut !== "brouillon" ? "#0F6E56" : txt2, margin: 0 }}>
                                 {selected.statut !== "brouillon" ? "✅ Signé" : "En attente"}
                               </p>
                             </div>
                           </div>
-                          <canvas ref={sigDelRef} width={300} height={120} style={{
-                            border: `1.5px dashed ${brd}`, borderRadius: "8px",
-                            background: bg3, width: "100%", touchAction: "none", cursor: estVerrouille ? "not-allowed" : "crosshair"
-                          }}/>
+                          <canvas ref={sigDelRef} width={300} height={120} style={{ border: `1.5px dashed ${brd}`, borderRadius: "8px", background: bg3, width: "100%", touchAction: "none", cursor: estVerrouille ? "not-allowed" : "crosshair" }}/>
                           {!estVerrouille && (
                             <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
-                              <button onClick={() => sigDelPad.current?.clear()} style={{ flex: 1, padding: "8px", background: bg3, color: txt2, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
-                                🗑️ Effacer
-                              </button>
-                              <button onClick={() => handleSigner("delegue")} disabled={saving} style={{ flex: 1, padding: "8px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>
-                                ✅ Valider
-                              </button>
+                              <button onClick={() => sigDelPad.current?.clear()} style={{ flex: 1, padding: "8px", background: bg3, color: txt2, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>🗑️ Effacer</button>
+                              <button onClick={() => handleSigner("delegue")} disabled={saving} style={{ flex: 1, padding: "8px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>✅ Valider</button>
                             </div>
                           )}
                         </div>
@@ -663,43 +632,27 @@ export default function CahierTextePage() {
                             <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>✍️</div>
                             <div>
                               <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>Enseignant</p>
-                              <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>
+                              <p style={{ fontSize: "11px", color: selected.statut === "cloture" ? "#0F6E56" : txt2, margin: 0 }}>
                                 {selected.statut === "cloture" ? "✅ Signé" : "En attente"}
                               </p>
                             </div>
                           </div>
-                          <canvas ref={sigEnsRef} width={300} height={120} style={{
-                            border: `1.5px dashed ${brd}`, borderRadius: "8px",
-                            background: bg3, width: "100%", touchAction: "none", cursor: estVerrouille ? "not-allowed" : "crosshair"
-                          }}/>
+                          <canvas ref={sigEnsRef} width={300} height={120} style={{ border: `1.5px dashed ${brd}`, borderRadius: "8px", background: bg3, width: "100%", touchAction: "none", cursor: estVerrouille ? "not-allowed" : "crosshair" }}/>
                           {!estVerrouille && (
                             <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
-                              <button onClick={() => sigEnsPad.current?.clear()} style={{ flex: 1, padding: "8px", background: bg3, color: txt2, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
-                                🗑️ Effacer
-                              </button>
-                              <button onClick={() => handleSigner("enseignant")} disabled={saving} style={{ flex: 1, padding: "8px", background: "#534AB7", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>
-                                ✅ Valider
-                              </button>
+                              <button onClick={() => sigEnsPad.current?.clear()} style={{ flex: 1, padding: "8px", background: bg3, color: txt2, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>🗑️ Effacer</button>
+                              <button onClick={() => handleSigner("enseignant")} disabled={saving} style={{ flex: 1, padding: "8px", background: "#534AB7", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>✅ Valider</button>
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Clôturer */}
                       {!estVerrouille && (
                         <div style={{ display: "flex", gap: "10px" }}>
-                          <button onClick={handleCloture} disabled={saving} style={{
-                            flex: 1, padding: "12px", background: "#0F6E56", color: "#fff",
-                            border: "none", borderRadius: "10px", fontSize: "14px",
-                            fontWeight: "500", cursor: "pointer"
-                          }}>
+                          <button onClick={handleCloture} disabled={saving} style={{ flex: 1, padding: "12px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "500", cursor: "pointer" }}>
                             {saving ? "⏳..." : "🔒 Clôturer la séance"}
                           </button>
-                          <button style={{
-                            padding: "12px 20px", background: "#FCEBEB", color: "#791F1F",
-                            border: "0.5px solid #F09595", borderRadius: "10px",
-                            fontSize: "14px", cursor: "pointer"
-                          }}>⚠️ Signaler incident</button>
+                          <button style={{ padding: "12px 20px", background: "#FCEBEB", color: "#791F1F", border: "0.5px solid #F09595", borderRadius: "10px", fontSize: "14px", cursor: "pointer" }}>⚠️ Signaler incident</button>
                         </div>
                       )}
                     </div>
@@ -710,6 +663,39 @@ export default function CahierTextePage() {
           </div>
         </div>
       </div>
+
+      {/* Modal Ajouter Cahier */}
+      {showModalAjouter && (
+        <div onClick={() => setShowModalAjouter(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: bg2, borderRadius: "16px", padding: "1.5rem", width: "420px", border: `0.5px solid ${brd}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", color: txt }}>➕ Nouveau cahier de texte</h3>
+              <button onClick={() => setShowModalAjouter(false)} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: txt2 }}>×</button>
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", color: txt2, display: "block", marginBottom: "6px" }}>Sélectionnez un créneau</label>
+              <select value={formNouveauCahier.id_creneau} onChange={e => setFormNouveauCahier({...formNouveauCahier, id_creneau: e.target.value})} style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", border: `0.5px solid ${brd}`, background: bg3, color: txt, fontSize: "13px" }}>
+                <option value="">Choisir un créneau...</option>
+                {creneaux.map((cr, i) => (
+                  <option key={i} value={cr.id}>
+                    {cr.jour} — {cr.heure_debut?.slice(0,5)} — {cr.matiere} ({cr.enseignant?.split(" ").slice(-1)[0]})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ background: bg3, borderRadius: "8px", padding: "10px 12px", marginBottom: "16px", display: "flex", gap: "8px" }}>
+              <span>ℹ️</span>
+              <p style={{ fontSize: "12px", color: txt2, margin: 0 }}>Le cahier sera créé en brouillon. Le délégué pourra ensuite remplir le contenu.</p>
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={handleAjouterCahier} disabled={saving} style={{ flex: 1, padding: "11px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "500", cursor: "pointer" }}>
+                {saving ? "⏳..." : "➕ Créer le cahier"}
+              </button>
+              <button onClick={() => setShowModalAjouter(false)} style={{ padding: "11px 20px", background: bg3, color: txt, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
