@@ -61,6 +61,7 @@ export default function DashboardEnseignantPage() {
     { id: "seances",   label: "Mes séances",      icon: "📅", route: "/emploi-temps" },
     { id: "cahiers",   label: "Mes cahiers",       icon: "📝", route: "/cahiers" },
     { id: "vacations", label: "Mes vacations",     icon: "💰", route: "/vacations" },
+    { id: "scanner", label: "📱 Scanner QR", icon: "📱", route: "/scanner" },
   ];
 
  const statutBadge = (statut) => {

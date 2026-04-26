@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 // Pages
+import QRScannerPage from "./pages/QRScannerPage";
 import ReferentielsPage from "./pages/ReferentielsPage";
 import EnseignantsPage from "./pages/EnseignantsPage";
 import RapportsPage from "./pages/RapportsPage";
@@ -133,6 +134,12 @@ function App() {
               <RapportsPage />
           </PrivateRoute>
           }/>
+          {/* QR Scanner */}
+<Route path="/scanner" element={
+  <PrivateRoute roles={["enseignant"]}>
+    <QRScannerPage />
+  </PrivateRoute>
+}/>
 
           {/* Route inconnue */}
           <Route path="*" element={<Navigate to="/login" />} />
