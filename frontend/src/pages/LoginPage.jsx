@@ -35,14 +35,14 @@ export default function LoginPage() {
     }
   };
 
- const roles = [
+const roles = [
   { label: "Administrateur", color: "#0F6E56", bg: "#E1F5EE", icon: "⊞",  email: "admin@isge.bf" },
   { label: "Enseignant",     color: "#534AB7", bg: "#EEEDFE", icon: "👨‍🏫", email: "cbere@isge.bf" },
   { label: "Délégué",        color: "#BA7517", bg: "#FAEEDA", icon: "📝",  email: "delegue.l1@isge.bf" },
   { label: "Surveillant",    color: "#185FA5", bg: "#E6F1FB", icon: "👁️",  email: "surveillant@isge.bf" },
   { label: "Comptable",      color: "#993C1D", bg: "#FAECE7", icon: "💰",  email: "comptable@isge.bf" },
+  { label: "Étudiant",       color: "#085041", bg: "#E1F5EE", icon: "🎓",  email: "etudiant@isge.bf" },
 ];
-
   return (
     <div style={{
       minHeight: "100vh",
