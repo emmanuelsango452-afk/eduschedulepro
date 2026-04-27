@@ -28,7 +28,6 @@ if ($methode === 'GET' && $action === 'qr') {
     echo json_encode(["succes" => false, "message" => "Méthode non autorisée."]);
 }
 
-// ============================================================
 function listerPlannings() {
     $utilisateur = AuthJWT::proteger();
     $db  = new Database();
@@ -77,7 +76,6 @@ function listerPlannings() {
     echo json_encode(["succes" => true, "data" => $plannings]);
 }
 
-// ============================================================
 function creerPlanning($donnees) {
     $utilisateur = AuthJWT::proteger(['administrateur']);
 
@@ -92,7 +90,6 @@ function creerPlanning($donnees) {
 
     $semaine = $donnees['semaine_debut'] ?? date('Y-m-d', strtotime('monday this week'));
 
-    // Vérifier si un planning existe déjà pour cette classe/semaine
     $stmt = $pdo->prepare("SELECT id FROM emploi_temps WHERE id_classe = ? AND semaine_debut = ?");
     $stmt->execute([$donnees['id_classe'], $semaine]);
     $existing = $stmt->fetch();
@@ -108,7 +105,6 @@ function creerPlanning($donnees) {
         $id_planning = $pdo->lastInsertId();
     }
 
-    // Ajouter les créneaux
     if (!empty($donnees['creneaux'])) {
         foreach ($donnees['creneaux'] as $creneau) {
 
@@ -126,12 +122,10 @@ function creerPlanning($donnees) {
                 )
             ");
             $stmtConflict->execute([
-                $creneau['id_enseignant'],
-                $creneau['jour'],
-                $semaine,
-                $creneau['heure_fin'],    $creneau['heure_debut'],
-                $creneau['heure_debut'],  $creneau['heure_fin'],
-                $creneau['heure_debut'],  $creneau['heure_fin']
+                $creneau['id_enseignant'], $creneau['jour'], $semaine,
+                $creneau['heure_fin'], $creneau['heure_debut'],
+                $creneau['heure_debut'], $creneau['heure_fin'],
+                $creneau['heure_debut'], $creneau['heure_fin']
             ]);
 
             if ($stmtConflict->fetchColumn() > 0) {
@@ -157,12 +151,10 @@ function creerPlanning($donnees) {
                 )
             ");
             $stmtSalle->execute([
-                $creneau['id_salle'],
-                $creneau['jour'],
-                $semaine,
-                $creneau['heure_fin'],    $creneau['heure_debut'],
-                $creneau['heure_debut'],  $creneau['heure_fin'],
-                $creneau['heure_debut'],  $creneau['heure_fin']
+                $creneau['id_salle'], $creneau['jour'], $semaine,
+                $creneau['heure_fin'], $creneau['heure_debut'],
+                $creneau['heure_debut'], $creneau['heure_fin'],
+                $creneau['heure_debut'], $creneau['heure_fin']
             ]);
 
             if ($stmtSalle->fetchColumn() > 0) {
@@ -174,14 +166,11 @@ function creerPlanning($donnees) {
                 return;
             }
 
-            // Générer token QR
-            $qr_token  = hash_hmac('sha256', $id_planning . '|' . $creneau['jour'] . '|' . $creneau['heure_debut'] . '|' . time(), QR_SECRET);
-            $qr_expire = date('Y-m-d H:i:s', strtotime($semaine . ' ' . $creneau['heure_debut']) + (QR_FENETRE_MINUTES * 60));
-
+            // Insérer le créneau sans token d'abord
             $stmt3 = $pdo->prepare("
                 INSERT INTO creneaux
                 (id_emploi_temps, id_matiere, id_enseignant, id_salle, jour, heure_debut, heure_fin, qr_token, qr_expire)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)
             ");
             $stmt3->execute([
                 $id_planning,
@@ -191,9 +180,16 @@ function creerPlanning($donnees) {
                 $creneau['jour'],
                 $creneau['heure_debut'],
                 $creneau['heure_fin'],
-                $qr_token,
-                $qr_expire
             ]);
+
+            // Récupérer l'ID et générer token automatique valable 1 an
+            $id_creneau = $pdo->lastInsertId();
+            $pdo->prepare("
+                UPDATE creneaux
+                SET qr_token  = CONCAT('TOKEN_', id, '_TEST'),
+                    qr_expire = DATE_ADD(NOW(), INTERVAL 365 DAY)
+                WHERE id = ?
+            ")->execute([$id_creneau]);
         }
     }
 
@@ -205,7 +201,6 @@ function creerPlanning($donnees) {
     ]);
 }
 
-// ============================================================
 function publierPlanning($id, $donnees) {
     $utilisateur = AuthJWT::proteger(['administrateur']);
 
@@ -229,7 +224,6 @@ function publierPlanning($id, $donnees) {
     }
 
     $nouveau_statut = $planning['statut_publication'] === 'publie' ? 'brouillon' : 'publie';
-
     $pdo->prepare("UPDATE emploi_temps SET statut_publication = ? WHERE id = ?")
         ->execute([$nouveau_statut, $id]);
 
@@ -240,7 +234,6 @@ function publierPlanning($id, $donnees) {
     ]);
 }
 
-// ============================================================
 function genererQRCode($id_creneau) {
     $utilisateur = AuthJWT::proteger(['administrateur']);
 
@@ -281,7 +274,6 @@ function genererQRCode($id_creneau) {
     ]);
 }
 
-// ============================================================
 function supprimerCreneau($id) {
     $utilisateur = AuthJWT::proteger(['administrateur']);
 

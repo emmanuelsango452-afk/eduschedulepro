@@ -61,7 +61,21 @@ function verifierToken($donnees) {
         echo json_encode(["succes" => false, "message" => "Ce créneau a déjà été pointé."]);
         return;
     }
-    $retard_minutes = round((time() - strtotime($creneau['heure_debut'])) / 60);
+    // Vérifier que le jour du cours correspond au jour actuel
+$jour_cours = $creneau['jour'];
+$jours_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+$jour_actuel = $jours_fr[date('N') - 1];
+
+if ($jour_cours !== $jour_actuel) {
+    http_response_code(400);
+    echo json_encode([
+        "succes"  => false,
+        "message" => "⚠️ Ce cours est prévu le $jour_cours. Vous ne pouvez pas pointer aujourd'hui ($jour_actuel)."
+    ]);
+    return;
+}
+
+$retard_minutes = round((time() - strtotime($creneau['heure_debut'])) / 60);
     echo json_encode([
         "succes"         => true,
         "message"        => "Token valide. Confirmez le pointage.",
@@ -117,7 +131,21 @@ function validerScan($donnees) {
         echo json_encode(["succes" => false, "message" => "Ce créneau a déjà été pointé."]);
         return;
     }
-    $retard_minutes = round((time() - strtotime($creneau['heure_debut'])) / 60);
+    // Vérifier que le jour du cours correspond au jour actuel
+$jour_cours = $creneau['jour'];
+$jours_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+$jour_actuel = $jours_fr[date('N') - 1];
+
+if ($jour_cours !== $jour_actuel) {
+    http_response_code(400);
+    echo json_encode([
+        "succes"  => false,
+        "message" => "⚠️ Ce cours est prévu le $jour_cours. Vous ne pouvez pas pointer aujourd'hui ($jour_actuel)."
+    ]);
+    return;
+}
+
+$retard_minutes = round((time() - strtotime($creneau['heure_debut'])) / 60);
     $statut = $retard_minutes > 30 ? 'retard' : 'valide';
     $pdo->prepare("INSERT INTO pointages (id_creneau, heure_pointage_reelle, ip_source, token_utilise, statut) VALUES (?, NOW(), ?, ?, ?)")
         ->execute([$creneau['id'], $_SERVER['REMOTE_ADDR'] ?? 'unknown', $donnees['token_qr'], $statut]);

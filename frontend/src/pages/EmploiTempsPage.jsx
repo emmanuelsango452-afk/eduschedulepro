@@ -36,6 +36,12 @@ export default function EmploiTempsPage() {
   const [filtreMatiere, setFiltreMatiere] = useState("");
   const [jourSelec, setJourSelec]         = useState(JOURS[0]);
   const [message, setMessage]             = useState("");
+  const [semaineDebut, setSemaineDebut] = useState(() => {
+  const today = new Date();
+  const day = today.getDay() || 7;
+  today.setDate(today.getDate() - day + 1);
+  return today.toISOString().slice(0,10);
+});
   const [form, setForm] = useState({
     id_classe: "", id_matiere: "", id_enseignant: "",
     id_salle: "", jour: "Lundi", heure_debut: "08:00", heure_fin: "10:00"
@@ -52,7 +58,7 @@ export default function EmploiTempsPage() {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await axios.get(`${API}/emploi_temps.php?id_classe=${id}`, {
+      const res = await axios.get(`${API}/emploi_temps.php?id_classe=${id}&semaine=${semaineDebut}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data.succes) setPlannings(res.data.data);
@@ -83,10 +89,9 @@ export default function EmploiTempsPage() {
     });
   }, [token]);
 
-  useEffect(() => {
-    chargerPlannings(classeId);
-  }, [classeId, token]);
-
+ useEffect(() => {
+  chargerPlannings(classeId);
+}, [classeId, token, semaineDebut]);
   const getCreneaux = (jour, heure) => {
     const creneaux = [];
     plannings.forEach(planning => {
@@ -162,7 +167,7 @@ const getCouleur = (matiere) => {
     }
     try {
       const res = await axios.post(`${API}/emploi_temps.php`, {
-        id_classe: classeId, semaine_debut: "2026-04-14",
+        id_classe: classeId, semaine_debut: semaineDebut,
         creneaux: [{ id_matiere: form.id_matiere, id_enseignant: form.id_enseignant, id_salle: form.id_salle, jour: form.jour, heure_debut: form.heure_debut + ":00", heure_fin: form.heure_fin + ":00" }]
       }, { headers: { Authorization: `Bearer ${token}` } });
       if (res.data.succes) {
@@ -222,7 +227,11 @@ const getCouleur = (matiere) => {
         <div style={{ background: bg2, padding: "10px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `0.5px solid ${brd}`, flexWrap: "wrap", gap: "8px" }}>
           <div>
             <p style={{ margin: 0, fontSize: "15px", fontWeight: "500", color: txt }}>Emploi du temps</p>
-            <p style={{ margin: 0, fontSize: "12px", color: txt2 }}>Semaine du 14 au 19 avril 2026</p>
+            
+            
+            <p style={{ margin: 0, fontSize: "12px", color: txt2 }}>
+  Semaine du {new Date(semaineDebut).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} au {new Date(new Date(semaineDebut).setDate(new Date(semaineDebut).getDate() + 5)).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+</p>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             {message && (
@@ -247,9 +256,29 @@ const getCouleur = (matiere) => {
               ))}
             </div>
             <div style={{ display: "flex", gap: "4px" }}>
-              <button style={{ padding: "6px 10px", borderRadius: "6px", border: `0.5px solid ${brd}`, background: bg2, color: txt, cursor: "pointer", fontSize: "12px" }}>◀</button>
-              <button style={{ padding: "6px 10px", borderRadius: "6px", border: "none", background: "#0F6E56", color: "#fff", cursor: "pointer", fontSize: "12px" }}>Aujourd'hui</button>
-              <button style={{ padding: "6px 10px", borderRadius: "6px", border: `0.5px solid ${brd}`, background: bg2, color: txt, cursor: "pointer", fontSize: "12px" }}>▶</button>
+
+              <button onClick={() => {
+  const d = new Date(semaineDebut);
+  d.setDate(d.getDate() - 7);
+  setSemaineDebut(d.toISOString().slice(0,10));
+}} style={{ padding: "6px 10px", borderRadius: "6px", border: `0.5px solid ${brd}`, background: bg2, color: txt, cursor: "pointer", fontSize: "12px" }}>◀</button>
+
+<button onClick={() => {
+  const today = new Date();
+  const day = today.getDay() || 7;
+  today.setDate(today.getDate() - day + 1);
+  setSemaineDebut(today.toISOString().slice(0,10));
+}} style={{ padding: "6px 10px", borderRadius: "6px", border: "none", background: "#0F6E56", color: "#fff", cursor: "pointer", fontSize: "12px" }}>Aujourd'hui</button>
+
+<button onClick={() => {
+  const d = new Date(semaineDebut);
+  d.setDate(d.getDate() + 7);
+  setSemaineDebut(d.toISOString().slice(0,10));
+}} style={{ padding: "6px 10px", borderRadius: "6px", border: `0.5px solid ${brd}`, background: bg2, color: txt, cursor: "pointer", fontSize: "12px" }}>▶</button>
+            
+            
+            
+            
             </div>
             <button onClick={() => setShowModal(true)} style={{ padding: "7px 14px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>+ Nouveau créneau</button>
             {plannings.length > 0 && (
@@ -288,7 +317,9 @@ const getCouleur = (matiere) => {
                   {JOURS.map((jour, i) => (
                     <div key={jour} style={{ background: i === new Date().getDay() - 1 ? "#1D9E75" : "#085041", color: "#E1F5EE", padding: "10px 4px", textAlign: "center", borderRadius: "8px", fontSize: "12px", fontWeight: "500" }}>
                       <div>{jour}</div>
-                      <div style={{ fontSize: "10px", opacity: 0.8, marginTop: "2px" }}>{14 + i} avr.</div>
+                      <div style={{ fontSize: "10px", opacity: 0.8, marginTop: "2px" }}>
+  {new Date(new Date(semaineDebut).setDate(new Date(semaineDebut).getDate() + i)).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+</div>
                     </div>
                   ))}
                 </div>
