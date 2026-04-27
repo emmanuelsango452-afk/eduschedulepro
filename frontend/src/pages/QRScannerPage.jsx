@@ -17,6 +17,8 @@ export default function QRScannerPage() {
   const [tokenManuel, setTokenManuel] = useState("");
   const [scanning, setScanning]   = useState(false);
   const [resultat, setResultat]   = useState(null); // null | success | error | retard
+  const [creneauPreview, setCreneauPreview] = useState(null); // infos avant confirmation
+  const [tokenEnAttente, setTokenEnAttente] = useState(null); // token en attente de confirmation
   const [creneau, setCreneau]     = useState(null);
   const [message, setMessage]     = useState("");
   const [loading, setLoading]     = useState(false);
@@ -77,18 +79,18 @@ export default function QRScannerPage() {
     }, 300);
   };
 
-  const validerToken = async (token_qr) => {
+ const verifierToken = async (token_qr) => {
     setLoading(true);
     setResultat(null);
     try {
-      const res = await axios.post(`${API}/pointages.php?action=scan`, {
+      const res = await axios.post(`${API}/pointages.php?action=verifier`, {
         token_qr
       }, { headers: { Authorization: `Bearer ${token}` } });
 
       if (res.data.succes) {
-        setCreneau(res.data.creneau);
-        setResultat(res.data.statut === "retard" ? "retard" : "success");
-        setMessage(res.data.message);
+        setCreneauPreview(res.data.creneau);
+        setTokenEnAttente(token_qr);
+        setMessage("");
       }
     } catch (err) {
       setResultat("error");
@@ -96,6 +98,33 @@ export default function QRScannerPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmerPointage = async () => {
+    if (!tokenEnAttente) return;
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API}/pointages.php?action=scan`, {
+        token_qr: tokenEnAttente
+      }, { headers: { Authorization: `Bearer ${token}` } });
+
+      if (res.data.succes) {
+        setCreneau(res.data.creneau);
+        setResultat(res.data.statut === "retard" ? "retard" : "success");
+        setMessage(res.data.message);
+        setCreneauPreview(null);
+        setTokenEnAttente(null);
+      }
+    } catch (err) {
+      setResultat("error");
+      setMessage(err.response?.data?.message || "Erreur lors du pointage.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validerToken = async (token_qr) => {
+    verifierToken(token_qr);
   };
 
   const handleSaisieManuelle = () => {
@@ -206,7 +235,49 @@ export default function QRScannerPage() {
 
         {/* Interface scan */}
         {!resultat && (
+            
           <div>
+
+     {/* Prévisualisation séance avant confirmation */}
+      {creneauPreview && (
+      <div style={{
+         background: "#E1F5EE", borderRadius: "16px", padding: "1.5rem",
+         marginBottom: "1.5rem", border: "2px solid #0F6E56"
+     }}>
+    <p style={{ fontSize: "16px", fontWeight: "600", color: "#085041", margin: "0 0 16px", textAlign: "center" }}>
+      📋 Confirmer le pointage
+    </p>
+    <div style={{ background: "#fff", borderRadius: "10px", padding: "12px", marginBottom: "16px" }}>
+      {[
+        { label: "Matière",    val: creneauPreview.matiere },
+        { label: "Classe",     val: creneauPreview.classe },
+        { label: "Salle",      val: creneauPreview.salle },
+        { label: "Enseignant", val: creneauPreview.enseignant },
+        { label: "Début",      val: creneauPreview.heure_debut?.slice(0,5) },
+        { label: "Fin",        val: creneauPreview.heure_fin?.slice(0,5) },
+      ].map(item => (
+        <div key={item.label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "0.5px solid rgba(0,0,0,0.06)" }}>
+          <span style={{ fontSize: "13px", color: "#5F5E5A" }}>{item.label}</span>
+          <span style={{ fontSize: "13px", fontWeight: "500", color: "#04342C" }}>{item.val}</span>
+        </div>
+      ))}
+    </div>
+    <div style={{ display: "flex", gap: "10px" }}>
+      <button onClick={confirmerPointage} disabled={loading} style={{
+        flex: 1, padding: "12px", background: "#0F6E56", color: "#fff",
+        border: "none", borderRadius: "10px", fontSize: "14px",
+        fontWeight: "500", cursor: "pointer"
+      }}>
+        {loading ? "⏳..." : "✅ Confirmer le pointage"}
+      </button>
+      <button onClick={() => { setCreneauPreview(null); setTokenEnAttente(null); reset(); }} style={{
+        padding: "12px 16px", background: "#FCEBEB", color: "#791F1F",
+        border: "0.5px solid #F09595", borderRadius: "10px",
+        fontSize: "14px", cursor: "pointer"
+      }}>❌ Annuler</button>
+    </div>
+  </div>
+)}
             {/* Sélecteur mode */}
             <div style={{ display: "flex", background: bg3, borderRadius: "10px", padding: "4px", marginBottom: "1.5rem" }}>
               {[
