@@ -25,8 +25,13 @@ export default function DashboardEtudiantPage() {
   const [loading, setLoading]       = useState(true);
   const [vue, setVue]               = useState("semaine");
   const [jourSelec, setJourSelec]   = useState(JOURS[0]);
-  const [creneauSelec, setCreneauSelec] = useState(null);
-
+  const [semaineDebut, setSemaineDebut] = useState(() => {
+  const today = new Date();
+  const day = today.getDay() || 7;
+  today.setDate(today.getDate() - day + 1);
+  return today.toISOString().slice(0,10);
+});
+const [creneauSelec, setCreneauSelec] = useState(null);
   const bg   = dark ? "#0d1117" : "#f0faf6";
   const bg2  = dark ? "#161b22" : "#ffffff";
   const bg3  = dark ? "#21262d" : "#e1f5ee";
@@ -46,15 +51,15 @@ export default function DashboardEtudiantPage() {
   }, [token]);
 
   useEffect(() => {
-    if (!classeId) return;
-    setLoading(true);
-    axios.get(`${API}/emploi_temps.php?id_classe=${classeId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(res => {
-      if (res.data.succes) setPlannings(res.data.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [classeId, token]);
+  if (!classeId) return;
+  setLoading(true);
+  axios.get(`${API}/emploi_temps.php?id_classe=${classeId}&semaine=${semaineDebut}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  }).then(res => {
+    if (res.data.succes) setPlannings(res.data.data);
+    setLoading(false);
+  }).catch(() => setLoading(false));
+}, [classeId, token, semaineDebut]);
 
   const getCreneaux = (jour, heure) => {
     const crs = [];
@@ -172,14 +177,33 @@ export default function DashboardEtudiantPage() {
           </div>
         </div>
 
-        {/* Bandeau lecture seule */}
-        <div style={{ padding: "8px 20px", background: "#E1F5EE", borderBottom: `0.5px solid ${brd}`, display: "flex", gap: "8px", alignItems: "center" }}>
-          <span>👁️</span>
-          <p style={{ fontSize: "12px", color: "#085041", margin: 0, fontWeight: "500" }}>
-            Mode lecture seule — Vous consultez l'emploi du temps de votre classe
-          </p>
-        </div>
-
+        {/* Bandeau lecture seule + navigation semaines */}
+<div style={{ padding: "8px 20px", background: "#E1F5EE", borderBottom: `0.5px solid ${brd}`, display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+    <span>👁️</span>
+    <p style={{ fontSize: "12px", color: "#085041", margin: 0, fontWeight: "500" }}>
+      Mode lecture seule — Semaine du {new Date(semaineDebut).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} au {new Date(new Date(semaineDebut).setDate(new Date(semaineDebut).getDate() + 5)).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+    </p>
+  </div>
+  <div style={{ display: "flex", gap: "4px" }}>
+    <button onClick={() => {
+      const d = new Date(semaineDebut);
+      d.setDate(d.getDate() - 7);
+      setSemaineDebut(d.toISOString().slice(0,10));
+    }} style={{ padding: "5px 10px", borderRadius: "6px", border: `0.5px solid #9FE1CB`, background: "#fff", color: "#085041", cursor: "pointer", fontSize: "12px" }}>◀</button>
+    <button onClick={() => {
+      const today = new Date();
+      const day = today.getDay() || 7;
+      today.setDate(today.getDate() - day + 1);
+      setSemaineDebut(today.toISOString().slice(0,10));
+    }} style={{ padding: "5px 10px", borderRadius: "6px", border: "none", background: "#0F6E56", color: "#fff", cursor: "pointer", fontSize: "12px" }}>Aujourd'hui</button>
+    <button onClick={() => {
+      const d = new Date(semaineDebut);
+      d.setDate(d.getDate() + 7);
+      setSemaineDebut(d.toISOString().slice(0,10));
+    }} style={{ padding: "5px 10px", borderRadius: "6px", border: `0.5px solid #9FE1CB`, background: "#fff", color: "#085041", cursor: "pointer", fontSize: "12px" }}>▶</button>
+  </div>
+</div>
         {/* Contenu */}
         <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
           {loading ? (
