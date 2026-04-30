@@ -79,6 +79,29 @@ export default function EnseignantsPage() {
     setShowModal(true);
   };
 
+  const exportExcel = () => {
+  const data = enseignantsFiltres.map(e => ({
+    "Matricule":    e.matricule || "",
+    "Nom":          e.nom || "",
+    "Prénom":       e.prenom || "",
+    "Email":        e.email || "",
+    "Spécialité":   e.specialite || "",
+    "Statut":       e.statut === "permanent" ? "Permanent" : "Vacataire",
+    "Taux horaire": e.taux_horaire || 0,
+  }));
+
+  const entete = Object.keys(data[0]).join(";");
+  const lignes = data.map(row => Object.values(row).join(";"));
+  const csv    = [entete, ...lignes].join("\n");
+  const blob   = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url    = URL.createObjectURL(blob);
+  const a      = document.createElement("a");
+  a.href       = url;
+  a.download   = "enseignants_edutrack.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
   const menuItems = [
     { label: "Tableau de bord", icon: "⊞",  route: "/dashboard/admin" },
     { label: "Emploi du temps", icon: "📅",  route: "/emploi-temps" },
@@ -128,6 +151,11 @@ export default function EnseignantsPage() {
             <p style={{ margin: 0, fontSize: "12px", color: txt2 }}>{enseignants.length} enseignant(s) enregistré(s)</p>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button onClick={exportExcel} style={{
+            padding: "8px 16px", background: "#1D6F42", color: "#fff",
+            border: "none", borderRadius: "8px", fontSize: "12px",
+            cursor: "pointer", fontWeight: "500"
+            }}>📊 Export Excel</button>
             <button onClick={() => { setSelected(null); setForm({ nom: "", prenom: "", email: "", specialite: "", statut: "vacataire", taux_horaire: 6500 }); setShowModal(true); }} style={{
               padding: "8px 16px", background: "#0F6E56", color: "#fff",
               border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500"

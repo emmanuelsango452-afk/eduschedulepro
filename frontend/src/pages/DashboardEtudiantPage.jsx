@@ -31,7 +31,7 @@ export default function DashboardEtudiantPage() {
   today.setDate(today.getDate() - day + 1);
   return today.toISOString().slice(0,10);
 });
-const [creneauSelec, setCreneauSelec] = useState(null);
+  const [creneauSelec, setCreneauSelec] = useState(null);
   const bg   = dark ? "#0d1117" : "#f0faf6";
   const bg2  = dark ? "#161b22" : "#ffffff";
   const bg3  = dark ? "#21262d" : "#e1f5ee";
