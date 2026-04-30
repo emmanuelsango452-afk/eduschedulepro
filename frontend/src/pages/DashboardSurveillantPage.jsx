@@ -308,33 +308,39 @@ export default function DashboardSurveillantPage() {
             </div>
           )}
 
-          {ongletActif === "rapports" && (
+       {ongletActif === "rapports" && (
             <div>
-              <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "1.25rem" }}>
-                <p style={{ fontSize: "15px", fontWeight: "500", color: txt, margin: "0 0 16px" }}>
-                  📊 Génération de rapports
+            <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "1.25rem" }}>
+            <p style={{ fontSize: "15px", fontWeight: "500", color: txt, margin: "0 0 16px" }}>
+                📊 Génération de rapports
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                {[
+                  { icon: "📊", title: "Rapport de présence",   desc: "Taux de présence par classe et par semaine", color: "#E1F5EE", txt: "#085041" },
+                  { icon: "📝", title: "Rapport des cahiers",   desc: "État des cahiers de texte par matière",      color: "#EEEDFE", txt: "#3C3489" },
+                  { icon: "💰", title: "Rapport des vacations", desc: "Récapitulatif des paiements du mois",        color: "#FAEEDA", txt: "#633806" },
+                ].map((r, i) => (
+                  <div key={i} style={{ background: r.color, borderRadius: "12px", padding: "1.25rem" }}>
+                    <p style={{ fontSize: "32px", margin: "0 0 12px" }}>{r.icon}</p>
+                    <p style={{ fontSize: "14px", fontWeight: "500", color: r.txt, margin: "0 0 6px" }}>{r.title}</p>
+                    <p style={{ fontSize: "12px", color: r.txt, margin: "0 0 16px", opacity: 0.8 }}>{r.desc}</p>
+                    <button onClick={() => navigate("/rapports")} style={{
+                      width: "100%", padding: "8px", background: "rgba(0,0,0,0.1)",
+                      color: r.txt, border: "none", borderRadius: "8px",
+                      fontSize: "12px", cursor: "pointer", fontWeight: "500"
+                    }}>Générer →</button>
+              </div>
+                ))}
+              </div>
+              <div style={{ marginTop: "16px", background: bg3, borderRadius: "10px", padding: "12px 16px", display: "flex", gap: "10px", alignItems: "center" }}>
+                <span>💡</span>
+                <p style={{ fontSize: "12px", color: txt2, margin: 0 }}>
+                  Cliquez sur "Générer →" pour accéder à la page complète des rapports avec export PDF et Excel.
                 </p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
-                  {[
-                    { icon: "📊", title: "Rapport de présence",    desc: "Taux de présence par classe et par semaine",   color: "#E1F5EE", txt: "#085041" },
-                    { icon: "📝", title: "Rapport des cahiers",    desc: "État des cahiers de texte par matière",        color: "#EEEDFE", txt: "#3C3489" },
-                    { icon: "💰", title: "Rapport des vacations",  desc: "Récapitulatif des paiements du mois",          color: "#FAEEDA", txt: "#633806" },
-                  ].map((r, i) => (
-                    <div key={i} style={{ background: r.color, borderRadius: "12px", padding: "1.25rem", cursor: "pointer" }}>
-                      <p style={{ fontSize: "32px", margin: "0 0 12px" }}>{r.icon}</p>
-                      <p style={{ fontSize: "14px", fontWeight: "500", color: r.txt, margin: "0 0 6px" }}>{r.title}</p>
-                      <p style={{ fontSize: "12px", color: r.txt, margin: "0 0 16px", opacity: 0.8 }}>{r.desc}</p>
-                      <button style={{
-                        width: "100%", padding: "8px", background: "rgba(0,0,0,0.1)",
-                        color: r.txt, border: "none", borderRadius: "8px",
-                        fontSize: "12px", cursor: "pointer", fontWeight: "500"
-                      }}>Générer →</button>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
-          )}
+          </div>
+         )}
         </div>
       </div>
     </div>
