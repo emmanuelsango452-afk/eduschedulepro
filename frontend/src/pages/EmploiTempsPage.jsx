@@ -286,8 +286,46 @@ const getCouleur = (matiere) => {
                 {plannings[0].statut_publication === "publie" ? "📴 Dépublier" : "📢 Publier"}
               </button>
             )}
-            <button style={{ padding: "7px 14px", background: "#EEEDFE", color: "#3C3489", border: "0.5px solid #CECBF6", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>📋 Dupliquer semaine</button>
-            
+            <button onClick={async () => {
+            const creneaux = getTousCreneaux();
+            if (creneaux.length === 0) {
+              setMessage("⚠️ Aucun créneau à dupliquer !");
+              setTimeout(() => setMessage(""), 3000);
+              return;
+            }
+            // Calculer la semaine suivante
+            const prochaineLundi = new Date(semaineDebut);
+            prochaineLundi.setDate(prochaineLundi.getDate() + 7);
+            const semaineSuivante = prochaineLundi.toISOString().slice(0,10);
+
+            try {
+                        const res = await axios.post(`${API}/emploi_temps.php`, {
+                          id_classe: classeId,
+                          semaine_debut: semaineSuivante,
+                          creneaux: creneaux.map(cr => ({
+                            id_matiere:    cr.id_matiere,
+                            id_enseignant: cr.id_enseignant,
+                            id_salle:      cr.id_salle,
+                            jour:          cr.jour,
+                            heure_debut:   cr.heure_debut,
+                            heure_fin:     cr.heure_fin,
+                          }))
+              }, { headers: { Authorization: `Bearer ${token}` } });
+
+              if (res.data.succes) {
+                setMessage(`✅ Semaine dupliquée vers ${prochaineLundi.toLocaleDateString("fr-FR")} !`);
+                setSemaineDebut(semaineSuivante);
+                setTimeout(() => setMessage(""), 4000);
+              } else {
+                setMessage(`❌ ${res.data.message}`);
+                setTimeout(() => setMessage(""), 4000);
+              }
+            } catch (err) {
+              setMessage(`❌ ${err.response?.data?.message || "Erreur lors de la duplication"}`);
+              setTimeout(() => setMessage(""), 4000);
+            }
+          }} style={{ padding: "7px 14px", background: "#EEEDFE", color: "#3C3489", border: "0.5px solid #CECBF6", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>📋 Dupliquer semaine</button>
+                      
             <button onClick={() => {
             const classe = classes.find(c => c.id == classeId)?.libelle || "Classe";
             const creneaux = getTousCreneaux();
