@@ -287,7 +287,62 @@ const getCouleur = (matiere) => {
               </button>
             )}
             <button style={{ padding: "7px 14px", background: "#EEEDFE", color: "#3C3489", border: "0.5px solid #CECBF6", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>📋 Dupliquer semaine</button>
-            <button style={{ padding: "7px 14px", background: bg2, color: txt, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>📄 Export PDF</button>
+            
+            <button onClick={() => {
+            const classe = classes.find(c => c.id == classeId)?.libelle || "Classe";
+            const creneaux = getTousCreneaux();
+            const contenu = `
+            <html>
+        <head>
+            <title>Emploi du temps — ${classe}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #04342C; font-size: 18px; margin-bottom: 5px; }
+            p { color: #5F5E5A; font-size: 12px; margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { background: #04342C; color: white; padding: 8px 12px; text-align: left; }
+            td { padding: 8px 12px; border-bottom: 1px solid #e0e0e0; }
+            tr:nth-child(even) { background: #f5f5f5; }
+          </style>
+        </head>
+    <body>
+      <h1>📅 Emploi du temps — ${classe}</h1>
+      <p>Semaine du ${new Date(semaineDebut).toLocaleDateString("fr-FR")} — Généré le ${new Date().toLocaleDateString("fr-FR")}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Jour</th>
+            <th>Début</th>
+            <th>Fin</th>
+            <th>Matière</th>
+            <th>Enseignant</th>
+            <th>Salle</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${creneaux.map(cr => `
+            <tr>
+              <td>${cr.jour}</td>
+              <td>${cr.heure_debut?.slice(0,5)}</td>
+              <td>${cr.heure_fin?.slice(0,5)}</td>
+              <td>${cr.matiere}</td>
+              <td>${cr.enseignant}</td>
+              <td>${cr.salle}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `;
+  const fenetre = window.open("", "_blank");
+  fenetre.document.write(contenu);
+  fenetre.document.close();
+  fenetre.print();
+}} style={{ padding: "7px 14px", background: bg2, color: txt, border: `0.5px solid ${brd}`, borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>📄 Export PDF</button>
+            
+            
+            
             <button onClick={() => setDark(!dark)} style={{ width: "36px", height: "36px", background: bg3, borderRadius: "8px", border: `0.5px solid ${brd}`, cursor: "pointer", fontSize: "16px" }}>{dark ? "☀️" : "🌙"}</button>
           </div>
         </div>
