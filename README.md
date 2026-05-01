@@ -194,7 +194,10 @@ eduschedulepro/
 
 ## 👨‍💻 Développé par
 
-**Emmanuel SANGO** — Licence Informatique  
+- *Emmanuel SANGO*
+- *Arthur OUEDRAOGO*
+- *Aicha DIABATE*
+
 Institut Supérieur de Génie Électrique (ISGE)  
 Ouagadougou, Burkina Faso — 2025-2026
 
