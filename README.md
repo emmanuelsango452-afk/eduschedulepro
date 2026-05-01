@@ -49,6 +49,7 @@
 - Filtres par classe, enseignant, matière
 - Détection automatique des conflits
 - Publication/dépublication du planning
+- Duplication de semaine
 - Export PDF
 - Génération QR-Code par créneau
 
@@ -83,6 +84,10 @@
 ### 👥 Gestion des utilisateurs
 - CRUD tous rôles
 - Activation/désactivation des comptes
+
+### 📊 Rapports
+- 6 types de rapports (présence, cahiers, vacations, emploi du temps, avancement, audit)
+- Export PDF et Excel pour chaque rapport
 
 ---
 
@@ -194,7 +199,10 @@ eduschedulepro/
 
 ## 👨‍💻 Développé par
 
-**Emmanuel SANGO** — Licence Informatique  
+- **Emmanuel SANGO**
+- **Arthur OUEDRAOGO**
+- **Aicha DIABATE**
+
 Institut Supérieur de Génie Électrique (ISGE)  
 Ouagadougou, Burkina Faso — 2025-2026
 
