@@ -242,7 +242,7 @@ export default function CahierTextePage() {
   };
 
   const menuItems = [
-    { label: "Tableau de bord",  icon: "⊞", route: "/dashboard/admin" },
+    { label: "Tableau de bord", icon: "⊞", route: utilisateur?.role === "administrateur" ? "/dashboard/admin" : utilisateur?.role === "enseignant" ? "/dashboard/enseignant" : utilisateur?.role === "delegue" ? "/dashboard/delegue" : utilisateur?.role === "surveillant" ? "/dashboard/surveillant" : utilisateur?.role === "comptable" ? "/dashboard/comptable" : "/dashboard/admin" },
     { label: "Emploi du temps",  icon: "📅", route: "/emploi-temps" },
     { label: "Cahiers de texte", icon: "📝", route: "/cahiers", active: true },
     { label: "Vacations",        icon: "💰", route: "/vacations" },

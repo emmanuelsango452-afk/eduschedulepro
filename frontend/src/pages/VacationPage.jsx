@@ -7,7 +7,7 @@ import SignaturePad from "signature_pad";
 const API = "http://localhost/eduschedulepro/backend/api";
 
 export default function VacationPage() {
-  const { token } = useAuth();
+ const { token, utilisateur } = useAuth();
   const navigate  = useNavigate();
   const [vacations, setVacations]       = useState([]);
   const [enseignants, setEnseignants]   = useState([]);
@@ -93,28 +93,31 @@ export default function VacationPage() {
     }
   };
 
-  const handleValider = async (action) => {
-    if (!selected) return;
-    const pad = action === "valider" ? sigSurvPad.current : sigEnsPad.current;
-    setSaving(true);
-    try {
-      await axios.post(`${API}/vacations.php?action=${action}&id=${selected.id}`, {
-        visa_base64:  pad && !pad.isEmpty() ? pad.toDataURL() : null,
-        commentaire: "Validé"
-      }, { headers: { Authorization: `Bearer ${token}` } });
-      setMessage("✅ Validation enregistrée !");
-      const res = await axios.get(`${API}/vacations.php`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.data.succes) {
-        setVacations(res.data.data);
-        setSelected(res.data.data.find(v => v.id === selected.id));
-      }
-    } catch (err) {
-      setMessage("❌ Erreur lors de la validation");
-    } finally {
-      setSaving(false);
-      setTimeout(() => setMessage(""), 3000);
+ const handleValider = async (action) => {
+  if (!selected) return;
+  const pad = action === "signer" ? sigEnsPad.current : action === "valider" ? sigSurvPad.current : null;
+  setSaving(true);
+  try {
+    await axios.post(`${API}/vacations.php?action=${action}&id=${selected.id}`, {
+      visa_base64:  pad && !pad.isEmpty() ? pad.toDataURL() : null,
+      signature_base64: pad && !pad.isEmpty() ? pad.toDataURL() : null,
+      commentaire: "Validé"
+    }, { headers: { Authorization: `Bearer ${token}` } });
+    setMessage("✅ Validation enregistrée !");
+    const res = await axios.get(`${API}/vacations.php`, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.data.succes) {
+      setVacations(res.data.data);
+      setSelected(res.data.data.find(v => v.id === selected.id));
     }
-  };
+  } catch (err) {
+    setMessage(`❌ ${err.response?.data?.message || "Erreur lors de la validation"}`);
+  } finally {
+    setSaving(false);
+    setTimeout(() => setMessage(""), 3000);
+  }
+};
+
+
 
   // Données séances simulées pour la démo
   const seancesDemo = [
@@ -128,7 +131,7 @@ export default function VacationPage() {
   const totalMontant = seancesDemo.reduce((sum, s) => sum + s.montant, 0);
 
   const menuItems = [
-    { label: "Tableau de bord",  icon: "⊞", route: "/dashboard/admin" },
+    { label: "Tableau de bord", icon: "⊞", route: utilisateur?.role === "administrateur" ? "/dashboard/admin" : utilisateur?.role === "enseignant" ? "/dashboard/enseignant" : utilisateur?.role === "delegue" ? "/dashboard/delegue" : utilisateur?.role === "surveillant" ? "/dashboard/surveillant" : utilisateur?.role === "comptable" ? "/dashboard/comptable" : "/dashboard/admin" },
     { label: "Emploi du temps",  icon: "📅", route: "/emploi-temps" },
     { label: "Cahiers de texte", icon: "📝", route: "/cahiers" },
     { label: "Vacations",        icon: "💰", route: "/vacations", active: true },
@@ -528,12 +531,12 @@ export default function VacationPage() {
                             border: `1.5px dashed ${brd}`, borderRadius: "8px",
                             background: bg3, width: "100%", touchAction: "none", cursor: "crosshair"
                           }}/>
-                          <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+                        <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
                             <button onClick={() => sigEnsPad.current?.clear()} style={{ flex: 1, padding: "7px", background: bg3, color: txt2, border: `0.5px solid ${brd}`, borderRadius: "7px", fontSize: "11px", cursor: "pointer" }}>🗑️ Effacer</button>
-                            <button onClick={() => handleValider("valider")} disabled={saving} style={{ flex: 1, padding: "7px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "7px", fontSize: "11px", cursor: "pointer", fontWeight: "500" }}>✅ Valider</button>
+                            <button onClick={() => handleValider("signer")} disabled={saving} style={{ flex: 1, padding: "7px", background: "#0F6E56", color: "#fff", border: "none", borderRadius: "7px", fontSize: "11px", cursor: "pointer", fontWeight: "500" }}>✅ Valider</button>
                           </div>
-                        </div>
-
+                       </div>
+                        
                         {/* Visa surveillant */}
                         <div style={{ background: bg2, borderRadius: "12px", border: `0.5px solid ${brd}`, padding: "16px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>

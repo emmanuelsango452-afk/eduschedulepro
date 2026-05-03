@@ -2,12 +2,6 @@
 // ============================================================
 //  EduTrack Pro — Endpoint Vacations & Paiements
 //  Fichier : backend/api/vacations.php
-//  Routes :
-//    GET  /api/vacations?id_enseignant=X&mois=Y → Liste fiches
-//    POST /api/vacations/generer                → Générer fiche
-//    POST /api/vacations?id=X&action=valider    → Valider (surveillant)
-//    POST /api/vacations?id=X&action=approuver  → Approuver (comptable)
-//    GET  /api/vacations?id=X&action=pdf        → Télécharger PDF
 // ============================================================
 
 require_once __DIR__ . '/../config/constants.php';
@@ -23,6 +17,8 @@ if ($methode === 'GET' && !$action) {
     listerVacations();
 } elseif ($methode === 'POST' && $action === 'generer') {
     genererVacation($donnees);
+} elseif ($methode === 'POST' && $action === 'signer') {
+    signerVacation($id, $donnees);
 } elseif ($methode === 'POST' && $action === 'valider') {
     validerVacation($id, $donnees);
 } elseif ($methode === 'POST' && $action === 'approuver') {
@@ -41,7 +37,6 @@ function listerVacations() {
     $where  = "WHERE 1=1";
     $params = [];
 
-    // Un enseignant ne voit que ses propres fiches
     if ($utilisateur['role'] === 'enseignant') {
         $where   .= " AND v.id_enseignant = (SELECT id FROM enseignants WHERE email = ?)";
         $params[] = $utilisateur['email'];
@@ -84,7 +79,6 @@ function genererVacation($donnees) {
     $db  = new Database();
     $pdo = $db->connecter();
 
-    // Récupérer toutes les séances clôturées de l'enseignant pour ce mois
     $stmt = $pdo->prepare("
         SELECT ct.id AS id_cahier, ct.heure_fin_reelle,
                cr.id AS id_creneau, cr.heure_debut, cr.heure_fin,
@@ -107,22 +101,20 @@ function genererVacation($donnees) {
 
     if (empty($seances)) {
         http_response_code(404);
-        echo json_encode(["succes" => false, "message" => "Aucune séance clôturée trouvée."]);
+        echo json_encode(["succes" => false, "message" => "Aucune séance clôturée trouvée pour ce mois."]);
         return;
     }
 
-    // Calculer les montants
     $montant_brut   = 0;
     $lignes_details = [];
 
     foreach ($seances as $seance) {
-        // Calculer la durée en heures
-        $debut  = strtotime($seance['heure_debut']);
-        $fin    = strtotime($seance['heure_fin_reelle'] ?? $seance['heure_fin']);
-        $duree  = round(($fin - $debut) / 3600, 2);
+        $debut   = strtotime($seance['heure_debut']);
+        $fin     = strtotime($seance['heure_fin_reelle'] ?? $seance['heure_fin']);
+        $duree   = round(($fin - $debut) / 3600, 2);
         $montant = $duree * $seance['taux_horaire'];
 
-        $montant_brut += $montant;
+        $montant_brut   += $montant;
         $lignes_details[] = [
             'id_creneau'   => $seance['id_creneau'],
             'duree_heures' => $duree,
@@ -131,11 +123,9 @@ function genererVacation($donnees) {
         ];
     }
 
-    // Calculer les retenues et le montant net
     $retenues    = $montant_brut * TAUX_RETENUE;
     $montant_net = $montant_brut - $retenues;
 
-    // Créer la fiche de vacation
     $stmt2 = $pdo->prepare("
         INSERT INTO vacations
         (id_enseignant, mois, annee, montant_brut, retenues, montant_net, statut)
@@ -151,7 +141,6 @@ function genererVacation($donnees) {
     ]);
     $id_vacation = $pdo->lastInsertId();
 
-    // Créer les lignes de détail
     foreach ($lignes_details as $ligne) {
         $pdo->prepare("
             INSERT INTO vacation_lignes
@@ -179,6 +168,62 @@ function genererVacation($donnees) {
 }
 
 // ============================================================
+function signerVacation($id, $donnees) {
+    $utilisateur = AuthJWT::proteger(['enseignant']);
+
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(["succes" => false, "message" => "ID requis."]);
+        return;
+    }
+
+    $db  = new Database();
+    $pdo = $db->connecter();
+
+    // Vérifier que la fiche existe
+    $stmt = $pdo->prepare("SELECT * FROM vacations WHERE id = ?");
+    $stmt->execute([$id]);
+    $vacation = $stmt->fetch();
+
+    if (!$vacation) {
+        http_response_code(404);
+        echo json_encode(["succes" => false, "message" => "Fiche introuvable."]);
+        return;
+    }
+
+    if ($vacation['statut'] !== 'generee') {
+        http_response_code(400);
+        echo json_encode(["succes" => false, "message" => "Cette fiche ne peut plus être signée."]);
+        return;
+    }
+
+    // Mettre à jour le statut
+    $pdo->prepare("
+        UPDATE vacations SET statut = 'signee_enseignant' WHERE id = ?
+    ")->execute([$id]);
+
+    // Enregistrer la signature
+    if (!empty($donnees['signature_base64'])) {
+        $pdo->prepare("
+            INSERT INTO validations
+            (id_vacation, id_validateur, role_validateur, visa_base64, commentaire)
+            VALUES (?, ?, 'enseignant', ?, ?)
+        ")->execute([
+            $id,
+            $utilisateur['id'],
+            $donnees['signature_base64'],
+            $donnees['commentaire'] ?? null
+        ]);
+    }
+
+    echo json_encode([
+        "succes"  => true,
+        "message" => "Fiche signée par l'enseignant.",
+        "statut"  => "signee_enseignant"
+    ]);
+}
+
+// ============================================================
 function validerVacation($id, $donnees) {
     $utilisateur = AuthJWT::proteger(['surveillant']);
 
@@ -191,12 +236,10 @@ function validerVacation($id, $donnees) {
     $db  = new Database();
     $pdo = $db->connecter();
 
-    // Mettre à jour le statut
     $pdo->prepare("
         UPDATE vacations SET statut = 'validee_surveillant' WHERE id = ?
     ")->execute([$id]);
 
-    // Enregistrer le visa
     $pdo->prepare("
         INSERT INTO validations
         (id_vacation, id_validateur, role_validateur, visa_base64, commentaire)
