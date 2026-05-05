@@ -21,7 +21,11 @@ export default function DashboardAdminPage() {
   const navigate  = useNavigate();
   const [stats, setStats]     = useState(null);
   const [dark, setDark]       = useState(false);
-  const [notifs, setNotifs]   = useState(false);
+  const [notifs, setNotifs] = useState(false);
+  const [notifications, setNotifications] = useState([
+  { color: "#BA7517", texte: "Séance de demain à 08h00 — Réseaux", temps: "Il y a 1h" },
+  { color: "#1D9E75", texte: "Fiche vacation avril approuvée", temps: "Il y a 3h" },
+]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMenu, setActiveMenu]   = useState("dashboard");
 
@@ -182,9 +186,10 @@ export default function DashboardAdminPage() {
           borderBottom: `0.5px solid ${brd}`
         }}>
           <div>
-            <p style={{ margin: 0, fontSize: "15px", fontWeight: "500", color: txt }}>
-              Tableau de bord
-            </p>
+           <p style={{ margin: 0, fontSize: "15px", fontWeight: "500", color: txt }}>
+            Bonjour, {utilisateur?.email?.split("@")[0]} 👋
+          </p>
+            
             <p style={{ margin: 0, fontSize: "12px", color: txt2 }}>
               {new Date().toLocaleDateString("fr-FR", {
                 weekday: "long", day: "numeric", month: "long", year: "numeric"
@@ -259,16 +264,11 @@ export default function DashboardAdminPage() {
               display: "flex", justifyContent: "space-between", alignItems: "center"
             }}>
               <span style={{ fontSize: "13px", fontWeight: "500", color: txt }}>Notifications</span>
-              <span style={{ fontSize: "11px", color: "#1D9E75", cursor: "pointer" }}>
+              <span onClick={() => setNotifications([])} style={{ fontSize: "11px", color: "#1D9E75", cursor: "pointer" }}>
                 Tout marquer lu
               </span>
             </div>
-            {[
-              { color: "#E24B4A", texte: "Séance non pointée détectée", temps: "Il y a 10 min", lu: false },
-              { color: "#BA7517", texte: "Retard signalé — M. Kaboré", temps: "Il y a 25 min", lu: false },
-              { color: "#BA7517", texte: "5 cahiers en attente de signature", temps: "Il y a 1h", lu: true },
-              { color: "#1D9E75", texte: "Planning semaine publié", temps: "Il y a 2h", lu: true },
-            ].map((n, i) => (
+            {notifications.map((n, i) => (
               <div key={i} style={{
                 padding: "12px 16px", borderBottom: `0.5px solid ${brd}`,
                 display: "flex", gap: "10px", alignItems: "flex-start",
@@ -409,8 +409,8 @@ export default function DashboardAdminPage() {
                 <p style={{ fontSize: "13px", fontWeight: "500", color: txt, margin: 0 }}>
                   Séances du jour
                 </p>
-                <span style={{ fontSize: "11px", color: "#1D9E75", cursor: "pointer" }}>
-                  Voir tout →
+                <span onClick={() => navigate("/emploi-temps")} style={{ fontSize: "11px", color: "#1D9E75", cursor: "pointer" }}>
+                    Voir tout →
                 </span>
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
