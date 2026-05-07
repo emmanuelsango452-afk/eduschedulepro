@@ -14,7 +14,7 @@ ChartJS.register(
   PointElement, ArcElement, Title, Tooltip, Legend
 );
 
-const API = "http://localhost/eduschedulepro/backend/api";
+const API = "http://192.168.200.92/eduschedulepro/backend/api";
 
 export default function DashboardAdminPage() {
   const { utilisateur, token, deconnecter } = useAuth();

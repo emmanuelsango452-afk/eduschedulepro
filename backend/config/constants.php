@@ -7,7 +7,11 @@
 
 // --- Headers CORS ---
 // Permet à React (frontend) de communiquer avec PHP (backend)
-header("Access-Control-Allow-Origin: http://localhost:5173");
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowed = ['http://localhost:5173', 'http://192.168.200.92:5173', 'https://endeared-yin-carbon.ngrok-free.dev'];
+if (in_array($origin, $allowed)) {
+    header("Access-Control-Allow-Origin: $origin");
+}
 header("Content-Type: application/json; charset=UTF-8");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");

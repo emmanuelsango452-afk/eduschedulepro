@@ -10,7 +10,7 @@ import { Bar } from "react-chartjs-2";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-const API = "http://localhost/eduschedulepro/backend/api";
+const API = "http://192.168.200.92/eduschedulepro/backend/api";
 
 export default function DashboardEnseignantPage() {
   const { utilisateur, token, deconnecter } = useAuth();

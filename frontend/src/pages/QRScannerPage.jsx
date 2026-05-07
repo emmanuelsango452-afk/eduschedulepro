@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import jsQR from "jsqr";
 
-const API = "http://localhost/eduschedulepro/backend/api";
+const API = "http://192.168.200.92/eduschedulepro/backend/api";
 
 export default function QRScannerPage() {
   const { token, utilisateur } = useAuth();

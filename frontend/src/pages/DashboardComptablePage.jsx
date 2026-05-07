@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 
-const API = "http://localhost/eduschedulepro/backend/api";
+const API = "http://192.168.200.92/eduschedulepro/backend/api";
 
 export default function DashboardComptablePage() {
   const { utilisateur, token, deconnecter } = useAuth();
