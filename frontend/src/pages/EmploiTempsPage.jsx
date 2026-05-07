@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
+import { QRCodeSVG } from "qrcode.react";
 
 const API = "http://localhost/eduschedulepro/backend/api";
 
@@ -586,19 +587,13 @@ const getCouleur = (matiere) => {
             <h3 style={{ margin: "0 0 8px", fontSize: "16px", color: txt }}>QR-Code — Séance</h3>
             <p style={{ fontSize: "13px", color: txt2, margin: "0 0 20px" }}>{qrCreneau.matiere} — {qrCreneau.jour} {qrCreneau.heure_debut?.slice(0,5)}</p>
             <div style={{ background: "#fff", padding: "16px", borderRadius: "12px", display: "inline-block", marginBottom: "16px", border: "0.5px solid rgba(0,0,0,0.1)" }}>
-              <svg width="160" height="160" viewBox="0 0 160 160">
-                <rect x="10" y="10" width="40" height="40" fill="none" stroke="#000" strokeWidth="4"/>
-                <rect x="18" y="18" width="24" height="24" fill="#000"/>
-                <rect x="110" y="10" width="40" height="40" fill="none" stroke="#000" strokeWidth="4"/>
-                <rect x="118" y="18" width="24" height="24" fill="#000"/>
-                <rect x="10" y="110" width="40" height="40" fill="none" stroke="#000" strokeWidth="4"/>
-                <rect x="18" y="118" width="24" height="24" fill="#000"/>
-                {[20,30,40,50,60,70,80,90,100].map((x, i) =>
-                  [60,70,80,90,100,110,120].map((y, j) =>
-                    (i + j) % 3 === 0 ? <rect key={`${x}-${y}`} x={x} y={y} width="8" height="8" fill="#000"/> : null
-                  )
-                )}
-              </svg>
+              <QRCodeSVG
+              value={getToken(qrCreneau)}
+              size={160}
+              fgColor="#04342C"
+              bgColor="#ffffff"
+              level="H"
+              />
             </div>
             {/* Token réel */}
             <div style={{ background: "#E1F5EE", borderRadius: "8px", padding: "12px", marginBottom: "12px", textAlign: "left" }}>
