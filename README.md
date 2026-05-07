@@ -22,17 +22,19 @@
 | Styles | CSS-in-JS (inline styles) |
 | Graphiques | Chart.js |
 | Signature | SignaturePad |
-| QR Scanner | jsQR |
+| QR Scanner | jsQR + qrcode.react |
 | Export Excel | CSV natif |
+| Tunnel HTTPS | ngrok |
 
 ---
 
-## 👥 Rôles et accès
+## 👥 Comptes utilisateurs de démonstration
 
 | Rôle | Email | Mot de passe |
 |------|-------|-------------|
 | Administrateur | admin@isge.bf | password |
 | Enseignant | cbere@isge.bf | password |
+| Enseignant | psome@isge.bf | password |
 | Délégué | delegue.l1@isge.bf | password |
 | Surveillant | surveillant@isge.bf | password |
 | Comptable | comptable@isge.bf | password |
@@ -49,11 +51,13 @@
 - Filtres par classe, enseignant, matière
 - Détection automatique des conflits
 - Publication/dépublication du planning
+- Duplication de semaine
 - Export PDF
-- Génération QR-Code par créneau
+- Génération QR-Code scannable par créneau
 
 ### 📱 Pointage QR-Code
-- Scan caméra ou saisie manuelle du token
+- Scan caméra depuis smartphone (HTTPS requis)
+- Saisie manuelle du token en alternative
 - Affichage des infos de la séance avant confirmation
 - Détection automatique des retards (> 30 min)
 - Vérification du jour du cours
@@ -84,6 +88,10 @@
 - CRUD tous rôles
 - Activation/désactivation des comptes
 
+### 📊 Rapports
+- 6 types de rapports (présence, cahiers, vacations, emploi du temps, avancement, audit)
+- Export PDF et Excel pour chaque rapport
+
 ---
 
 ## 🚀 Installation
@@ -92,6 +100,7 @@
 - WAMP (Windows) avec MySQL 8+ et PHP 8.3+
 - Node.js 18+
 - Git
+- ngrok (optionnel — pour accès depuis smartphone)
 
 ### Étapes
 
@@ -110,7 +119,7 @@ Importer le fichier : database/eduschedulepro.sql
 
 **3. Configurer le backend**
 ```
-Copier le dossier backend/ dans C:\wamp64\www\eduschedulepro\
+Copier le dossier dans C:\wamp64\www\eduschedulepro\
 ```
 
 **4. Installer les dépendances frontend**
@@ -121,7 +130,7 @@ npm install
 
 **5. Lancer l'application**
 ```bash
-# Terminal 1 — Démarrer WAMP
+# Terminal 1 — Démarrer WAMP (icône verte)
 # Terminal 2 — Lancer React
 cd frontend
 npm run dev
@@ -131,6 +140,40 @@ npm run dev
 ```
 http://localhost:5173
 ```
+
+---
+
+## 📱 Accès depuis smartphone (scan QR-Code)
+
+Pour tester le scan QR-Code depuis un téléphone, utiliser ngrok :
+
+**1. Télécharger ngrok**
+```
+https://ngrok.com/download
+```
+
+**2. Configurer ngrok**
+```bash
+ngrok config add-authtoken VOTRE_TOKEN
+```
+
+**3. Lancer le serveur avec accès réseau**
+```bash
+cd frontend
+npm run dev -- --host --port 5173
+```
+
+**4. Lancer ngrok dans un autre terminal**
+```bash
+ngrok http 5173
+```
+
+**5. Utiliser l'adresse HTTPS affichée**
+```
+https://xxxx.ngrok-free.dev
+```
+
+> ⚠️ L'adresse ngrok change à chaque session. Le scan caméra nécessite HTTPS.
 
 ---
 
@@ -176,8 +219,10 @@ eduschedulepro/
 │           ├── UtilisateursPage.jsx
 │           ├── QRScannerPage.jsx
 │           └── RapportsPage.jsx
-└── database/
-    └── eduschedulepro.sql
+├── database/
+│   └── eduschedulepro.sql
+└── docs/
+    └── diagramme_uml.png
 ```
 
 ---
@@ -189,14 +234,15 @@ eduschedulepro/
 - Vérification du jour lors du pointage
 - Protection des routes par rôle
 - Logs de toutes les activités
+- CORS configuré pour accès local et ngrok
 
 ---
 
 ## 👨‍💻 Développé par
 
-- *Emmanuel SANGO*
-- *Arthur OUEDRAOGO*
-- *Aicha DIABATE*
+- **Emmanuel SANGO**
+- **Arthur OUEDRAOGO**
+- **Aicha DIABATE**
 
 Institut Supérieur de Génie Électrique (ISGE)  
 Ouagadougou, Burkina Faso — 2025-2026
