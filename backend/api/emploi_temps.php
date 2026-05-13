@@ -44,6 +44,8 @@ function listerPlannings() {
         $where   .= " AND et.semaine_debut = ?";
         $params[] = $_GET['semaine'];
     }
+
+    // Les étudiants ne voient que les plannings publiés
     if ($utilisateur['role'] === 'etudiant') {
         $where .= " AND et.statut_publication = 'publie'";
     }
@@ -73,7 +75,14 @@ function listerPlannings() {
         $planning['creneaux'] = $stmt2->fetchAll();
     }
 
-    echo json_encode(["succes" => true, "data" => $plannings]);
+    // Retourner le statut_publication depuis le premier planning
+    $statut = !empty($plannings) ? $plannings[0]['statut_publication'] : null;
+
+    echo json_encode([
+        "succes" => true,
+        "data" => $plannings,
+        "statut_publication" => $statut
+    ]);
 }
 
 function creerPlanning($donnees) {
@@ -166,7 +175,7 @@ function creerPlanning($donnees) {
                 return;
             }
 
-            // Insérer le créneau sans token d'abord
+            // Insérer le créneau
             $stmt3 = $pdo->prepare("
                 INSERT INTO creneaux
                 (id_emploi_temps, id_matiere, id_enseignant, id_salle, jour, heure_debut, heure_fin, qr_token, qr_expire)
@@ -182,7 +191,7 @@ function creerPlanning($donnees) {
                 $creneau['heure_fin'],
             ]);
 
-            // Récupérer l'ID et générer token automatique valable 1 an
+            // Générer token QR automatique
             $id_creneau = $pdo->lastInsertId();
             $pdo->prepare("
                 UPDATE creneaux

@@ -3,8 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 
-const API = "http://192.168.200.92/eduschedulepro/backend/api";
-
+const API  = 'http://localhost/eduschedulepro/backend/api';
 export default function LoginPage() {
   const [email, setEmail]           = useState("");
   const [password, setPassword]     = useState("");
