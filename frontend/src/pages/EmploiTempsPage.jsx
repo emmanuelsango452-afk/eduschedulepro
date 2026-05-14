@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import { QRCodeSVG } from "qrcode.react";
 
-const API = 'http://localhost/eduschedulepro/backend/api';
+const API = "http://localhost/eduschedulepro/backend/api";
 
 const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 const HEURES = ["07:30", "10:00", "14:00", "16:00"];
@@ -37,6 +37,7 @@ export default function EmploiTempsPage() {
   const [enseignants, setEnseignants]     = useState([]);
   const [matieres, setMatieres]           = useState([]);
   const [salles, setSalles]               = useState([]);
+  const [joursFeries, setJoursFeries]     = useState([]);
   const [classeId, setClasseId]           = useState("");
   const [dark, setDark]                   = useState(false);
   const [loading, setLoading]             = useState(true);
@@ -44,6 +45,7 @@ export default function EmploiTempsPage() {
   const [creneauSelec, setCreneauSelec]   = useState(null);
   const [sidebarOpen, setSidebarOpen]     = useState(true);
   const [showModal, setShowModal]         = useState(false);
+  const [showModalFerie, setShowModalFerie] = useState(false);
   const [showQR, setShowQR]               = useState(false);
   const [qrCreneau, setQrCreneau]         = useState(null);
   const [filtreEns, setFiltreEns]         = useState("");
@@ -59,6 +61,9 @@ export default function EmploiTempsPage() {
   const [form, setForm] = useState({
     id_classe: "", id_matiere: "", id_enseignant: "",
     id_salle: "", jour: "Lundi", heure_debut: "07:30", heure_fin: "09:30"
+  });
+  const [formFerie, setFormFerie] = useState({
+    date: "", libelle: "", type: "ferie", couleur: "#E24B4A"
   });
 
   const bg     = dark ? "#0d1117" : "#f0faf6";
@@ -81,6 +86,15 @@ export default function EmploiTempsPage() {
     finally { setLoading(false); }
   };
 
+  const chargerJoursFeries = async () => {
+    try {
+      const res = await axios.get(`${API}/jours_feries.php?semaine=${semaineDebut}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.succes) setJoursFeries(res.data.data);
+    } catch { setJoursFeries([]); }
+  };
+
   useEffect(() => {
     Promise.all([
       axios.get(`${API}/classes.php`,     { headers: { Authorization: `Bearer ${token}` } }),
@@ -101,7 +115,18 @@ export default function EmploiTempsPage() {
     });
   }, [token]);
 
-  useEffect(() => { chargerPlannings(classeId); }, [classeId, token, semaineDebut]);
+  useEffect(() => {
+    chargerPlannings(classeId);
+    chargerJoursFeries();
+  }, [classeId, token, semaineDebut]);
+
+  // Obtenir le jour férié pour une date donnée
+  const getJourFerie = (jourIndex) => {
+    const date = new Date(semaineDebut);
+    date.setDate(date.getDate() + jourIndex);
+    const dateStr = date.toISOString().slice(0, 10);
+    return joursFeries.find(jf => jf.date === dateStr) || null;
+  };
 
   const getCouleur = (matiere) => {
     if (COULEURS[matiere]) return COULEURS[matiere];
@@ -154,9 +179,7 @@ export default function EmploiTempsPage() {
 
   const handleCreerCreneau = async () => {
     if (!form.id_matiere || !form.id_enseignant || !form.id_salle) {
-      setMessage("⚠️ Veuillez remplir tous les champs !");
-      setTimeout(() => setMessage(""), 3000);
-      return;
+      setMessage("⚠️ Veuillez remplir tous les champs !"); setTimeout(() => setMessage(""), 3000); return;
     }
     try {
       const res = await axios.post(`${API}/emploi_temps.php`, {
@@ -164,13 +187,36 @@ export default function EmploiTempsPage() {
         creneaux: [{ id_matiere: form.id_matiere, id_enseignant: form.id_enseignant, id_salle: form.id_salle, jour: form.jour, heure_debut: form.heure_debut + ":00", heure_fin: form.heure_fin + ":00" }]
       }, { headers: { Authorization: `Bearer ${token}` } });
       if (res.data.succes) {
-        setMessage("✅ Créneau créé !");
-        setShowModal(false);
+        setMessage("✅ Créneau créé !"); setShowModal(false);
         setForm({ id_classe: classeId, id_matiere: "", id_enseignant: "", id_salle: "", jour: "Lundi", heure_debut: "07:30", heure_fin: "09:30" });
         chargerPlannings(classeId);
       } else { setMessage(`❌ ${res.data.message}`); }
     } catch (err) { setMessage(`❌ ${err.response?.data?.message || "Erreur"}`); }
     finally { setTimeout(() => setMessage(""), 4000); }
+  };
+
+  const handleCreerJourFerie = async () => {
+    if (!formFerie.date || !formFerie.libelle) {
+      setMessage("⚠️ Date et libellé requis !"); setTimeout(() => setMessage(""), 3000); return;
+    }
+    try {
+      const res = await axios.post(`${API}/jours_feries.php`, formFerie, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.data.succes) {
+        setMessage("✅ Jour férié ajouté !"); setShowModalFerie(false);
+        setFormFerie({ date: "", libelle: "", type: "ferie", couleur: "#E24B4A" });
+        chargerJoursFeries();
+      } else { setMessage(`❌ ${res.data.message}`); }
+    } catch (err) { setMessage(`❌ ${err.response?.data?.message || "Erreur"}`); }
+    finally { setTimeout(() => setMessage(""), 3000); }
+  };
+
+  const handleSupprimerJourFerie = async (id) => {
+    if (!window.confirm("Supprimer ce jour férié ?")) return;
+    try {
+      await axios.delete(`${API}/jours_feries.php?id=${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      setMessage("✅ Supprimé !"); chargerJoursFeries();
+      setTimeout(() => setMessage(""), 3000);
+    } catch { setMessage("❌ Erreur"); }
   };
 
   const menuItems = [
@@ -182,8 +228,13 @@ export default function EmploiTempsPage() {
     { label: "Rapports",         icon: "📊",  route: "/rapports" },
   ];
 
-  const inputStyle = { width: "100%", boxSizing: "border-box", padding: "9px 12px", borderRadius: "8px", border: `1px solid ${brd}`, background: bg3, color: txt, fontSize: "13px", outline: "none" };
+  const inputStyle  = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: "8px", border: `1px solid ${brd}`, background: bg3, color: txt, fontSize: "13px", outline: "none" };
   const selectStyle = { ...inputStyle };
+  const labelStyle  = { fontSize: "11px", color: txt2, display: "block", marginBottom: "5px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" };
+
+  // Jours fériés de la semaine courante
+  const joursFeriesSemaine = JOURS.map((_, i) => getJourFerie(i));
+  const nbFeriesSemaine    = joursFeriesSemaine.filter(Boolean).length;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: bg, fontFamily: "'Segoe UI', sans-serif" }}>
@@ -207,15 +258,12 @@ export default function EmploiTempsPage() {
           {menuItems.map(item => (
             <div key={item.label} onClick={() => navigate(item.route)} style={{
               display: "flex", alignItems: "center", gap: "12px",
-              padding: sidebarOpen ? "10px 12px" : "10px",
-              borderRadius: "10px", cursor: "pointer", marginBottom: "2px",
+              padding: sidebarOpen ? "10px 12px" : "10px", borderRadius: "10px", cursor: "pointer", marginBottom: "2px",
               background: item.active ? "linear-gradient(135deg, rgba(29,158,117,0.25), rgba(15,110,86,0.15))" : "transparent",
               border: item.active ? "1px solid rgba(29,158,117,0.3)" : "1px solid transparent",
             }}>
               <span style={{ fontSize: "17px", flexShrink: 0 }}>{item.icon}</span>
-              {sidebarOpen && (
-                <span style={{ color: item.active ? "#E1F5EE" : "#9FE1CB", fontSize: "13px", fontWeight: item.active ? "600" : "400", whiteSpace: "nowrap" }}>{item.label}</span>
-              )}
+              {sidebarOpen && <span style={{ color: item.active ? "#E1F5EE" : "#9FE1CB", fontSize: "13px", fontWeight: item.active ? "600" : "400", whiteSpace: "nowrap" }}>{item.label}</span>}
               {sidebarOpen && item.active && <div style={{ marginLeft: "auto", width: "4px", height: "16px", background: "#1D9E75", borderRadius: "2px" }}/>}
             </div>
           ))}
@@ -235,6 +283,7 @@ export default function EmploiTempsPage() {
               <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: txt }}>📅 Emploi du temps</p>
               <p style={{ margin: 0, fontSize: "12px", color: txt2 }}>
                 Semaine du {new Date(semaineDebut).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} au {new Date(new Date(semaineDebut).setDate(new Date(semaineDebut).getDate() + 5)).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                {nbFeriesSemaine > 0 && <span style={{ marginLeft: "8px", background: "#FCEBEB", color: "#791F1F", fontSize: "11px", padding: "2px 8px", borderRadius: "20px", fontWeight: "600" }}>🎉 {nbFeriesSemaine} jour(s) férié(s)</span>}
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -251,7 +300,6 @@ export default function EmploiTempsPage() {
 
           {/* Barre d'outils */}
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            {/* Filtres */}
             <select value={classeId} onChange={e => setClasseId(e.target.value)} style={{ padding: "7px 10px", borderRadius: "8px", fontSize: "12px", border: `1px solid ${brd}`, background: bg3, color: txt, fontWeight: "500" }}>
               {classes.map(c => <option key={c.id} value={c.id}>{c.libelle}</option>)}
             </select>
@@ -264,29 +312,29 @@ export default function EmploiTempsPage() {
               {matieres.map(m => <option key={m.id} value={m.libelle}>{m.libelle}</option>)}
             </select>
 
-            {/* Séparateur */}
             <div style={{ width: "1px", height: "24px", background: brd }}/>
 
-            {/* Vues */}
             <div style={{ display: "flex", background: bg3, borderRadius: "8px", overflow: "hidden", border: `1px solid ${brd}` }}>
               {[{ val: "semaine", label: "📅 Semaine" }, { val: "journee", label: "📆 Journée" }, { val: "liste", label: "📋 Liste" }].map(v => (
-                <button key={v.val} onClick={() => setVue(v.val)} style={{ padding: "7px 12px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "500", background: vue === v.val ? "#0F6E56" : "transparent", color: vue === v.val ? "#fff" : txt2, transition: "all 0.2s" }}>{v.label}</button>
+                <button key={v.val} onClick={() => setVue(v.val)} style={{ padding: "7px 12px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "500", background: vue === v.val ? "#0F6E56" : "transparent", color: vue === v.val ? "#fff" : txt2 }}>{v.label}</button>
               ))}
             </div>
 
-            {/* Navigation semaine */}
             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
               <button onClick={() => { const d = new Date(semaineDebut); d.setDate(d.getDate() - 7); setSemaineDebut(d.toISOString().slice(0,10)); }} style={{ padding: "7px 11px", borderRadius: "8px", border: `1px solid ${brd}`, background: bg2, color: txt, cursor: "pointer", fontSize: "13px", fontWeight: "600" }}>◀</button>
               <button onClick={() => { const today = new Date(); const day = today.getDay() || 7; today.setDate(today.getDate() - day + 1); setSemaineDebut(today.toISOString().slice(0,10)); }} style={{ padding: "7px 12px", borderRadius: "8px", border: "none", background: "linear-gradient(135deg, #1D9E75, #0F6E56)", color: "#fff", cursor: "pointer", fontSize: "11px", fontWeight: "600", boxShadow: "0 2px 8px rgba(15,110,86,0.3)" }}>Aujourd'hui</button>
               <button onClick={() => { const d = new Date(semaineDebut); d.setDate(d.getDate() + 7); setSemaineDebut(d.toISOString().slice(0,10)); }} style={{ padding: "7px 11px", borderRadius: "8px", border: `1px solid ${brd}`, background: bg2, color: txt, cursor: "pointer", fontSize: "13px", fontWeight: "600" }}>▶</button>
             </div>
 
-            {/* Séparateur */}
             <div style={{ width: "1px", height: "24px", background: brd }}/>
 
-            {/* Actions */}
             <button onClick={() => setShowModal(true)} style={{ padding: "7px 14px", background: "linear-gradient(135deg, #1D9E75, #0F6E56)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "600", boxShadow: "0 2px 8px rgba(15,110,86,0.3)" }}>
               ＋ Nouveau créneau
+            </button>
+
+            {/* Bouton Jour Férié */}
+            <button onClick={() => setShowModalFerie(true)} style={{ padding: "7px 14px", background: "#FCEBEB", color: "#791F1F", border: "1px solid #F09595", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "600" }}>
+              🎉 Jour férié
             </button>
 
             {plannings.length > 0 && (
@@ -305,7 +353,7 @@ export default function EmploiTempsPage() {
                 const res = await axios.post(`${API}/emploi_temps.php`, { id_classe: classeId, semaine_debut: semaineSuivante, creneaux: creneaux.map(cr => ({ id_matiere: cr.id_matiere, id_enseignant: cr.id_enseignant, id_salle: cr.id_salle, jour: cr.jour, heure_debut: cr.heure_debut, heure_fin: cr.heure_fin })) }, { headers: { Authorization: `Bearer ${token}` } });
                 if (res.data.succes) { setMessage(`✅ Semaine dupliquée !`); setSemaineDebut(semaineSuivante); }
                 else { setMessage(`❌ ${res.data.message}`); }
-              } catch (err) { setMessage(`❌ Erreur`); }
+              } catch { setMessage(`❌ Erreur`); }
               finally { setTimeout(() => setMessage(""), 4000); }
             }} style={{ padding: "7px 14px", background: "#EEEDFE", color: "#3C3489", border: "1px solid #CECBF6", borderRadius: "8px", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>
               📋 Dupliquer
@@ -335,6 +383,22 @@ export default function EmploiTempsPage() {
           </div>
         )}
 
+        {/* Bandeau jours fériés de la semaine */}
+        {nbFeriesSemaine > 0 && (
+          <div style={{ padding: "8px 24px", background: "#FFF3CD", borderBottom: `1px solid #FFD700`, display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "16px" }}>🎉</span>
+            <span style={{ fontSize: "12px", fontWeight: "600", color: "#856404" }}>Jours fériés cette semaine :</span>
+            {joursFeriesSemaine.filter(Boolean).map((jf, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "11px", background: "#FCEBEB", color: "#791F1F", padding: "3px 10px", borderRadius: "20px", fontWeight: "600" }}>
+                  {jf.type === "ferie" ? "🏖️" : "🎊"} {new Date(jf.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} — {jf.libelle}
+                </span>
+                <button onClick={() => handleSupprimerJourFerie(jf.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "12px", color: "#791F1F", padding: "0 2px" }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* CONTENU */}
         <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
           {loading ? (
@@ -351,20 +415,28 @@ export default function EmploiTempsPage() {
                     <span style={{ fontSize: "11px", color: txt2, fontWeight: "500" }}>Horaire</span>
                   </div>
                   {JOURS.map((jour, i) => {
-                    const isToday = i === new Date().getDay() - 1;
+                    const isToday  = i === new Date().getDay() - 1;
+                    const jourFerie = getJourFerie(i);
                     return (
                       <div key={jour} style={{
-                        background: isToday ? "linear-gradient(135deg, #1D9E75, #0F6E56)" : dark ? "#1e2a26" : "#085041",
+                        background: jourFerie ? `linear-gradient(135deg, ${jourFerie.couleur}CC, ${jourFerie.couleur})` : isToday ? "linear-gradient(135deg, #1D9E75, #0F6E56)" : dark ? "#1e2a26" : "#085041",
                         color: "#E1F5EE", padding: "12px 6px", textAlign: "center",
                         borderRadius: "10px", fontSize: "12px", fontWeight: "600",
-                        boxShadow: isToday ? "0 4px 12px rgba(29,158,117,0.4)" : "none",
-                        border: isToday ? "2px solid #1D9E75" : "2px solid transparent"
+                        boxShadow: jourFerie ? `0 4px 12px ${jourFerie.couleur}66` : isToday ? "0 4px 12px rgba(29,158,117,0.4)" : "none",
+                        border: isToday && !jourFerie ? "2px solid #1D9E75" : "2px solid transparent"
                       }}>
                         <div>{jour}</div>
-                        <div style={{ fontSize: "11px", opacity: 0.8, marginTop: "3px", fontWeight: "400" }}>
+                        <div style={{ fontSize: "11px", opacity: 0.9, marginTop: "3px", fontWeight: "400" }}>
                           {new Date(new Date(semaineDebut).setDate(new Date(semaineDebut).getDate() + i)).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
                         </div>
-                        {isToday && <div style={{ fontSize: "9px", marginTop: "3px", background: "rgba(255,255,255,0.2)", borderRadius: "4px", padding: "1px 6px" }}>Aujourd'hui</div>}
+                        {jourFerie && (
+                          <div style={{ fontSize: "9px", marginTop: "3px", background: "rgba(255,255,255,0.25)", borderRadius: "4px", padding: "2px 6px", fontWeight: "700" }}>
+                            🎉 {jourFerie.libelle}
+                          </div>
+                        )}
+                        {isToday && !jourFerie && (
+                          <div style={{ fontSize: "9px", marginTop: "3px", background: "rgba(255,255,255,0.2)", borderRadius: "4px", padding: "1px 6px" }}>Aujourd'hui</div>
+                        )}
                       </div>
                     );
                   })}
@@ -373,50 +445,69 @@ export default function EmploiTempsPage() {
                 {/* Créneaux */}
                 {HEURES.map((heure, index) => (
                   <div key={heure}>
-                    {/* Pause déjeuner */}
                     {index === 2 && (
                       <div style={{ display: "grid", gridTemplateColumns: "80px repeat(6, 1fr)", gap: "6px", marginBottom: "6px" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "2px" }}>
                           <span style={{ fontSize: "11px", color: "#BA7517", fontWeight: "700" }}>12:00</span>
                           <span style={{ fontSize: "9px", color: "#BA7517", opacity: 0.7 }}>1h30</span>
                         </div>
-                        {JOURS.map(jour => (
-                          <div key={jour} style={{ background: dark ? "rgba(186,117,23,0.15)" : "#FFF8E8", borderRadius: "8px", border: "1px dashed #E8C97A", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-                            <span style={{ fontSize: "14px" }}>🍽️</span>
-                            <span style={{ fontSize: "11px", color: "#BA7517", fontWeight: "600" }}>Pause déjeuner</span>
-                          </div>
-                        ))}
+                        {JOURS.map((jour, i) => {
+                          const jourFerie = getJourFerie(i);
+                          return (
+                            <div key={jour} style={{ background: jourFerie ? `${jourFerie.couleur}15` : dark ? "rgba(186,117,23,0.15)" : "#FFF8E8", borderRadius: "8px", border: jourFerie ? `1px dashed ${jourFerie.couleur}` : "1px dashed #E8C97A", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                              {jourFerie ? (
+                                <span style={{ fontSize: "11px", color: jourFerie.couleur, fontWeight: "600" }}>🎉 {jourFerie.libelle}</span>
+                              ) : (
+                                <>
+                                  <span style={{ fontSize: "14px" }}>🍽️</span>
+                                  <span style={{ fontSize: "11px", color: "#BA7517", fontWeight: "600" }}>Pause déjeuner</span>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
-                    {/* Ligne créneau */}
                     <div style={{ display: "grid", gridTemplateColumns: "80px repeat(6, 1fr)", gap: "6px", marginBottom: "6px" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: bg2, borderRadius: "8px", border: `1px solid ${brd}`, padding: "8px 4px" }}>
                         <span style={{ fontSize: "12px", color: txt, fontWeight: "700" }}>{heure}</span>
                         <span style={{ fontSize: "9px", color: txt2, marginTop: "2px" }}>–</span>
                         <span style={{ fontSize: "12px", color: txt2 }}>{["09:30", "12:00", "16:00", "18:00"][index]}</span>
                       </div>
-                      {JOURS.map(jour => {
+                      {JOURS.map((jour, i) => {
                         const crs = getCreneaux(jour, heure);
+                        const jourFerie = getJourFerie(i);
                         return (
-                          <div key={jour} style={{ background: bg2, borderRadius: "10px", border: `1px solid ${brd}`, minHeight: "100px", padding: "4px", position: "relative", transition: "box-shadow 0.2s" }}>
-                            {crs.length === 0 ? (
+                          <div key={jour} style={{
+                            background: jourFerie ? `${jourFerie.couleur}10` : bg2,
+                            borderRadius: "10px",
+                            border: jourFerie ? `1px solid ${jourFerie.couleur}40` : `1px solid ${brd}`,
+                            minHeight: "100px", padding: "4px", position: "relative"
+                          }}>
+                            {/* Bandeau jour férié sur les créneaux */}
+                            {jourFerie && crs.length === 0 && (
+                              <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "92px", gap: "4px" }}>
+                                <span style={{ fontSize: "20px" }}>🎉</span>
+                                <span style={{ fontSize: "9px", color: jourFerie.couleur, fontWeight: "700", textAlign: "center" }}>{jourFerie.libelle}</span>
+                              </div>
+                            )}
+                            {!jourFerie && crs.length === 0 && (
                               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", minHeight: "92px" }}>
                                 <span style={{ fontSize: "10px", color: brd }}>—</span>
                               </div>
-                            ) : crs.map((cr, i) => {
+                            )}
+                            {crs.map((cr, idx) => {
                               const c = getCouleur(cr.matiere);
                               return (
-                                <div key={i} onClick={() => setCreneauSelec(cr)} style={{
+                                <div key={idx} onClick={() => setCreneauSelec(cr)} style={{
                                   background: c.bg, borderLeft: `4px solid ${c.border}`,
                                   borderRadius: "6px", padding: "8px 10px", cursor: "pointer",
-                                  height: "calc(100% - 8px)", transition: "opacity 0.2s"
+                                  height: "calc(100% - 8px)"
                                 }}>
                                   <p style={{ fontSize: "11px", fontWeight: "700", color: c.txt, margin: "0 0 4px", lineHeight: 1.2 }}>{cr.matiere?.split(" ").slice(0, 3).join(" ")}</p>
                                   <p style={{ fontSize: "10px", color: c.txt, margin: "0 0 6px", opacity: 0.8 }}>👨‍🏫 {cr.enseignant?.split(" ").slice(-1)[0]}</p>
-                                  <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                                    <span style={{ fontSize: "9px", background: c.border, color: "#fff", padding: "2px 6px", borderRadius: "6px", fontWeight: "600" }}>🏛️ {cr.salle}</span>
-                                  </div>
+                                  <span style={{ fontSize: "9px", background: c.border, color: "#fff", padding: "2px 6px", borderRadius: "6px", fontWeight: "600" }}>🏛️ {cr.salle}</span>
                                 </div>
                               );
                             })}
@@ -436,30 +527,55 @@ export default function EmploiTempsPage() {
                       <span style={{ fontSize: "11px", color: txt2 }}>{matiere}</span>
                     </div>
                   ))}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontSize: "12px" }}>🎉</span>
+                    <span style={{ fontSize: "11px", color: txt2 }}>Jour férié / Événement</span>
+                  </div>
                 </div>
               </div>
             </div>
 
           ) : vue === "journee" ? (
             <div>
-              {/* Sélecteur jours */}
               <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
-                {JOURS.map((jour, i) => (
-                  <button key={jour} onClick={() => setJourSelec(jour)} style={{
-                    padding: "9px 16px", borderRadius: "10px",
-                    border: `1px solid ${jourSelec === jour ? "#0F6E56" : brd}`,
-                    cursor: "pointer", fontWeight: jourSelec === jour ? "600" : "400", fontSize: "12px",
-                    background: jourSelec === jour ? "linear-gradient(135deg, #1D9E75, #0F6E56)" : bg2,
-                    color: jourSelec === jour ? "#fff" : txt,
-                    boxShadow: jourSelec === jour ? "0 2px 8px rgba(15,110,86,0.3)" : "none"
-                  }}>
-                    <div>{jour}</div>
-                    <div style={{ fontSize: "10px", opacity: 0.8 }}>
-                      {new Date(new Date(semaineDebut).setDate(new Date(semaineDebut).getDate() + i)).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-                    </div>
-                  </button>
-                ))}
+                {JOURS.map((jour, i) => {
+                  const jourFerie = getJourFerie(i);
+                  return (
+                    <button key={jour} onClick={() => setJourSelec(jour)} style={{
+                      padding: "9px 16px", borderRadius: "10px",
+                      border: `1px solid ${jourSelec === jour ? "#0F6E56" : jourFerie ? jourFerie.couleur : brd}`,
+                      cursor: "pointer", fontSize: "12px",
+                      fontWeight: jourSelec === jour ? "600" : "400",
+                      background: jourSelec === jour ? "linear-gradient(135deg, #1D9E75, #0F6E56)" : jourFerie ? `${jourFerie.couleur}15` : bg2,
+                      color: jourSelec === jour ? "#fff" : jourFerie ? jourFerie.couleur : txt,
+                    }}>
+                      <div>{jour} {jourFerie ? "🎉" : ""}</div>
+                      <div style={{ fontSize: "10px", opacity: 0.8 }}>
+                        {new Date(new Date(semaineDebut).setDate(new Date(semaineDebut).getDate() + i)).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Bandeau jour férié journée */}
+              {(() => {
+                const idx = JOURS.indexOf(jourSelec);
+                const jf = getJourFerie(idx);
+                if (!jf) return null;
+                return (
+                  <div style={{ background: `${jf.couleur}15`, border: `1px solid ${jf.couleur}`, borderRadius: "12px", padding: "14px 18px", marginBottom: "16px", display: "flex", gap: "12px", alignItems: "center" }}>
+                    <span style={{ fontSize: "24px" }}>🎉</span>
+                    <div>
+                      <p style={{ fontSize: "14px", fontWeight: "700", color: jf.couleur, margin: "0 0 4px" }}>{jf.libelle}</p>
+                      <p style={{ fontSize: "12px", color: txt2, margin: 0 }}>
+                        {jf.type === "ferie" ? "Jour férié — " : "Événement spécial — "}
+                        {new Date(jf.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div style={{ background: bg2, borderRadius: "14px", border: `1px solid ${brd}`, overflow: "hidden", boxShadow: shadow }}>
                 <div style={{ padding: "16px 20px", borderBottom: `1px solid ${brd}`, background: bg3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -477,7 +593,7 @@ export default function EmploiTempsPage() {
                   getCreneauxJour(jourSelec).map((cr, i) => {
                     const c = getCouleur(cr.matiere);
                     return (
-                      <div key={i} onClick={() => setCreneauSelec(cr)} style={{ display: "flex", gap: "16px", alignItems: "stretch", padding: "16px 20px", borderBottom: `1px solid ${brd}`, cursor: "pointer", transition: "background 0.2s" }}>
+                      <div key={i} onClick={() => setCreneauSelec(cr)} style={{ display: "flex", gap: "16px", alignItems: "stretch", padding: "16px 20px", borderBottom: `1px solid ${brd}`, cursor: "pointer" }}>
                         <div style={{ minWidth: "90px", textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" }}>
                           <p style={{ fontSize: "15px", fontWeight: "700", color: txt, margin: "0 0 4px" }}>{cr.heure_debut?.slice(0,5)}</p>
                           <div style={{ height: "30px", width: "2px", background: `linear-gradient(180deg, ${c.border}, transparent)`, margin: "0 auto" }}/>
@@ -508,20 +624,27 @@ export default function EmploiTempsPage() {
                   <p style={{ color: txt2, fontSize: "14px" }}>Aucun créneau trouvé</p>
                 </div>
               ) : (
-                JOURS.map(jour => {
+                JOURS.map((jour, i) => {
                   const crs = getCreneauxJour(jour);
-                  if (crs.length === 0) return null;
+                  const jourFerie = getJourFerie(i);
                   return (
                     <div key={jour} style={{ marginBottom: "20px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                        <p style={{ fontSize: "12px", fontWeight: "700", color: txt2, margin: 0, textTransform: "uppercase", letterSpacing: "1px" }}>{jour}</p>
-                        <div style={{ flex: 1, height: "1px", background: brd }}/>
+                        <p style={{ fontSize: "12px", fontWeight: "700", color: jourFerie ? jourFerie.couleur : txt2, margin: 0, textTransform: "uppercase", letterSpacing: "1px" }}>
+                          {jour} {jourFerie ? `🎉 ${jourFerie.libelle}` : ""}
+                        </p>
+                        <div style={{ flex: 1, height: "1px", background: jourFerie ? jourFerie.couleur : brd }}/>
                         <span style={{ fontSize: "11px", color: txt2 }}>{crs.length} cours</span>
                       </div>
-                      {crs.map((cr, i) => {
+                      {jourFerie && (
+                        <div style={{ background: `${jourFerie.couleur}15`, border: `1px solid ${jourFerie.couleur}40`, borderRadius: "8px", padding: "8px 14px", marginBottom: "8px", fontSize: "12px", color: jourFerie.couleur, fontWeight: "600" }}>
+                          🎉 {jourFerie.libelle} — {jourFerie.type === "ferie" ? "Jour férié" : "Événement spécial"}
+                        </div>
+                      )}
+                      {crs.map((cr, idx) => {
                         const c = getCouleur(cr.matiere);
                         return (
-                          <div key={i} onClick={() => setCreneauSelec(cr)} style={{ background: bg2, borderRadius: "12px", border: `1px solid ${brd}`, padding: "14px 18px", display: "flex", alignItems: "center", gap: "16px", cursor: "pointer", marginBottom: "8px", borderLeft: `5px solid ${c.border}`, boxShadow: shadow, transition: "transform 0.2s" }}>
+                          <div key={idx} onClick={() => setCreneauSelec(cr)} style={{ background: bg2, borderRadius: "12px", border: `1px solid ${brd}`, padding: "14px 18px", display: "flex", alignItems: "center", gap: "16px", cursor: "pointer", marginBottom: "8px", borderLeft: `5px solid ${c.border}`, boxShadow: shadow }}>
                             <div style={{ minWidth: "70px", background: c.bg, padding: "8px", borderRadius: "8px", textAlign: "center" }}>
                               <p style={{ fontSize: "13px", fontWeight: "700", color: c.txt, margin: 0 }}>{cr.heure_debut?.slice(0,5)}</p>
                               <p style={{ fontSize: "11px", color: c.txt, margin: 0, opacity: 0.7 }}>{cr.heure_fin?.slice(0,5)}</p>
@@ -625,13 +748,13 @@ export default function EmploiTempsPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
               {[
-                { label: "Matière", key: "id_matiere", options: matieres.map(m => ({ val: m.id, label: m.libelle })) },
+                { label: "Matière",    key: "id_matiere",    options: matieres.map(m => ({ val: m.id, label: m.libelle })) },
                 { label: "Enseignant", key: "id_enseignant", options: enseignants.map(e => ({ val: e.id, label: `${e.prenom} ${e.nom}` })) },
-                { label: "Salle", key: "id_salle", options: salles.map(s => ({ val: s.id, label: s.code })) },
-                { label: "Jour", key: "jour", options: JOURS.map(j => ({ val: j, label: j })) },
+                { label: "Salle",      key: "id_salle",      options: salles.map(s => ({ val: s.id, label: s.code })) },
+                { label: "Jour",       key: "jour",          options: JOURS.map(j => ({ val: j, label: j })) },
               ].map(field => (
                 <div key={field.key}>
-                  <label style={{ fontSize: "11px", color: txt2, display: "block", marginBottom: "5px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>{field.label}</label>
+                  <label style={labelStyle}>{field.label}</label>
                   <select value={form[field.key]} onChange={e => setForm({...form, [field.key]: e.target.value})} style={selectStyle}>
                     <option value="">Sélectionner...</option>
                     {field.options.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
@@ -639,21 +762,17 @@ export default function EmploiTempsPage() {
                 </div>
               ))}
               <div>
-                <label style={{ fontSize: "11px", color: txt2, display: "block", marginBottom: "5px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Heure début</label>
+                <label style={labelStyle}>Heure début</label>
                 <select value={form.heure_debut} onChange={e => setForm({...form, heure_debut: e.target.value})} style={selectStyle}>
-                  <option value="07:30">07:30</option>
-                  <option value="10:00">10:00</option>
-                  <option value="14:00">14:00</option>
-                  <option value="16:00">16:00</option>
+                  <option value="07:30">07:30</option><option value="10:00">10:00</option>
+                  <option value="14:00">14:00</option><option value="16:00">16:00</option>
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: "11px", color: txt2, display: "block", marginBottom: "5px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>Heure fin</label>
+                <label style={labelStyle}>Heure fin</label>
                 <select value={form.heure_fin} onChange={e => setForm({...form, heure_fin: e.target.value})} style={selectStyle}>
-                  <option value="09:30">09:30</option>
-                  <option value="12:00">12:00</option>
-                  <option value="16:00">16:00</option>
-                  <option value="18:00">18:00</option>
+                  <option value="09:30">09:30</option><option value="12:00">12:00</option>
+                  <option value="16:00">16:00</option><option value="18:00">18:00</option>
                 </select>
               </div>
             </div>
@@ -664,6 +783,68 @@ export default function EmploiTempsPage() {
             <div style={{ display: "flex", gap: "10px" }}>
               <button onClick={handleCreerCreneau} style={{ flex: 1, padding: "12px", background: "linear-gradient(135deg, #1D9E75, #0F6E56)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: "700", cursor: "pointer", boxShadow: "0 4px 12px rgba(15,110,86,0.3)" }}>✅ Créer le créneau</button>
               <button onClick={() => setShowModal(false)} style={{ padding: "12px 20px", background: bg3, color: txt, border: `1px solid ${brd}`, borderRadius: "10px", fontSize: "13px", cursor: "pointer", fontWeight: "500" }}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL JOUR FÉRIÉ ===== */}
+      {showModalFerie && (
+        <div onClick={() => setShowModalFerie(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, backdropFilter: "blur(4px)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: bg2, borderRadius: "20px", padding: "1.75rem", width: "440px", border: `1px solid ${brd}`, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: txt }}>🎉 Ajouter un jour férié</h3>
+                <p style={{ margin: "4px 0 0", fontSize: "12px", color: txt2 }}>Marquer un jour comme férié ou événement spécial</p>
+              </div>
+              <button onClick={() => setShowModalFerie(false)} style={{ background: bg3, border: `1px solid ${brd}`, width: "36px", height: "36px", borderRadius: "10px", cursor: "pointer", color: txt2, fontSize: "18px", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+            </div>
+
+            <div style={{ marginBottom: "12px" }}>
+              <label style={labelStyle}>Date</label>
+              <input type="date" value={formFerie.date} onChange={e => setFormFerie({...formFerie, date: e.target.value})} style={inputStyle}/>
+            </div>
+
+            <div style={{ marginBottom: "12px" }}>
+              <label style={labelStyle}>Libellé</label>
+              <input type="text" value={formFerie.libelle} onChange={e => setFormFerie({...formFerie, libelle: e.target.value})} placeholder="Ex: Fête Nationale, Conférence..." style={inputStyle}/>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+              <div>
+                <label style={labelStyle}>Type</label>
+                <select value={formFerie.type} onChange={e => setFormFerie({...formFerie, type: e.target.value})} style={inputStyle}>
+                  <option value="ferie">🏖️ Jour férié</option>
+                  <option value="evenement">🎊 Événement spécial</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Couleur</label>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "6px" }}>
+                  <input type="color" value={formFerie.couleur} onChange={e => setFormFerie({...formFerie, couleur: e.target.value})} style={{ width: "40px", height: "38px", borderRadius: "8px", border: `1px solid ${brd}`, cursor: "pointer", padding: "2px" }}/>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    {["#E24B4A", "#534AB7", "#BA7517", "#185FA5", "#993C1D"].map(c => (
+                      <div key={c} onClick={() => setFormFerie({...formFerie, couleur: c})} style={{ width: "24px", height: "24px", borderRadius: "50%", background: c, cursor: "pointer", border: formFerie.couleur === c ? "3px solid #04342C" : "2px solid transparent" }}/>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Aperçu */}
+            <div style={{ background: `${formFerie.couleur}15`, border: `1px solid ${formFerie.couleur}`, borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "20px" }}>🎉</span>
+              <div>
+                <p style={{ fontSize: "13px", fontWeight: "700", color: formFerie.couleur, margin: 0 }}>{formFerie.libelle || "Libellé du jour"}</p>
+                <p style={{ fontSize: "11px", color: txt2, margin: 0 }}>{formFerie.date ? new Date(formFerie.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "Date non sélectionnée"}</p>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={handleCreerJourFerie} style={{ flex: 1, padding: "12px", background: "linear-gradient(135deg, #E24B4A, #C0392B)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "700", cursor: "pointer" }}>
+                🎉 Ajouter le jour férié
+              </button>
+              <button onClick={() => setShowModalFerie(false)} style={{ padding: "12px 20px", background: bg3, color: txt, border: `1px solid ${brd}`, borderRadius: "10px", fontSize: "13px", cursor: "pointer" }}>Annuler</button>
             </div>
           </div>
         </div>
