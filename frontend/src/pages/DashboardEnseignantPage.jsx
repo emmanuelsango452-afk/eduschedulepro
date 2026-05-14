@@ -117,7 +117,7 @@ export default function DashboardEnseignantPage() {
 
         <div style={{ flex: 1, padding: "12px 8px" }}>
           {menuItems.map(item => (
-            <div key={item.id} onClick={() => navigate(item.route)} style={{
+            <div key={item.id} onClick={() => { if (item.route !== "/dashboard/enseignant") navigate(item.route); }} style={{
               display: "flex", alignItems: "center", gap: "12px",
               padding: sidebarOpen ? "10px 12px" : "10px", borderRadius: "10px", cursor: "pointer", marginBottom: "2px",
               background: item.active ? "linear-gradient(135deg, rgba(29,158,117,0.25), rgba(15,110,86,0.15))" : "transparent",

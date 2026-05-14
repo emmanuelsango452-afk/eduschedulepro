@@ -30,7 +30,7 @@ const PALETTE = [
 ];
 
 export default function EmploiTempsPage() {
-  const { token } = useAuth();
+  const { token, utilisateur } = useAuth();
   const navigate  = useNavigate();
   const [plannings, setPlannings]         = useState([]);
   const [classes, setClasses]             = useState([]);
@@ -220,7 +220,7 @@ export default function EmploiTempsPage() {
   };
 
   const menuItems = [
-    { label: "Tableau de bord",  icon: "⊞",  route: "/dashboard/admin" },
+    { label: "Tableau de bord", icon: "⊞", route: utilisateur?.role === "enseignant" ? "/dashboard/enseignant" : utilisateur?.role === "delegue" ? "/dashboard/delegue" : "/dashboard/admin" },
     { label: "Emploi du temps",  icon: "📅",  route: "/emploi-temps", active: true },
     { label: "Cahiers de texte", icon: "📝",  route: "/cahiers" },
     { label: "Vacations",        icon: "💰",  route: "/vacations" },
