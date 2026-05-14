@@ -27,7 +27,7 @@ if ($methode === 'GET') {
 
 // ---- Lister tous les jours fériés ----
 function listerJoursFeries() {
-    $utilisateur = AuthJWT::proteger();
+    AuthJWT::proteger();
     $db  = new Database();
     $pdo = $db->connecter();
 
